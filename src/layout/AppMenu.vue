@@ -37,7 +37,7 @@ const menuModel = computed(() => [
         label: 'Portail',
         items: [
             {
-                label: '← Retour ferme',
+                label: 'Retour ferme',
                 icon: 'pi pi-fw pi-arrow-left',
                 url: '/ferme/dashboard',
             },
