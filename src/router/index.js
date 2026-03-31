@@ -27,6 +27,12 @@ const routes = [
                 component: () => import('@/views/admin/DashboardCrufiture.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Tableau de bord' },
             },
+            {
+                path: 'simulateur',
+                name: 'Simulateur',
+                component: () => import('@/views/admin/SimulateurFormulation.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Simulateur de formulation' },
+            },
         ],
     },
     { path: '/unauthorized', name: 'Unauthorized', component: () => import('@/views/common/Error.vue') },

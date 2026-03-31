@@ -17,6 +17,11 @@ const menuModel = computed(() => [
         label: 'Production',
         items: [
             {
+                label: 'Simulateur',
+                icon: 'pi pi-fw pi-calculator',
+                to: '/dashboard/simulateur',
+            },
+            {
                 label: 'Lots',
                 icon: 'pi pi-fw pi-list',
                 to: '/dashboard/lots',
