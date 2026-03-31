@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import axiosCrufiture from '@/plugins/axiosCrufiture';
 import axios from '@/plugins/axios';
+import axiosPeyrounet from '@/plugins/axiosPeyrounet';
+import draggable from 'vuedraggable';
 
 const route  = useRoute();
 const router = useRouter();
@@ -54,47 +56,14 @@ function etapeVide() {
     return { _key: newKey(), contenu: '' };
 }
 
-// ── Drag & drop fruits ────────────────────────────────────────────
-const dragIndex = ref(null);
 
-function onDragStart(idx) {
-    dragIndex.value = idx;
+// ── Drag & drop fruits (vuedraggable) ────────────────────────────
+function onFruitDragEnd() {
+    // Réassigner pivot/fruit après le réordonnement
+    fruits.value.forEach((f, i) => { f.type = i === 0 ? 'pivot' : 'fruit'; });
 }
 
-function onDragOver(e) {
-    e.preventDefault();
-}
-
-function onDrop(targetIdx) {
-    if (dragIndex.value === null || dragIndex.value === targetIdx) return;
-    const arr   = [...fruits.value];
-    const [item] = arr.splice(dragIndex.value, 1);
-    arr.splice(targetIdx, 0, item);
-    // Le premier de la liste devient toujours le pivot
-    arr.forEach((f, i) => { f.type = i === 0 ? 'pivot' : 'fruit'; });
-    fruits.value  = arr;
-    dragIndex.value = null;
-}
-
-function onDragEnd() {
-    dragIndex.value = null;
-}
-
-// Drag & drop étapes
-const dragEtapeIndex = ref(null);
-
-function onDragStartEtape(idx) { dragEtapeIndex.value = idx; }
-
-function onDropEtape(targetIdx) {
-    if (dragEtapeIndex.value === null || dragEtapeIndex.value === targetIdx) return;
-    const arr    = [...etapes.value];
-    const [item] = arr.splice(dragEtapeIndex.value, 1);
-    arr.splice(targetIdx, 0, item);
-    etapes.value       = arr;
-    dragEtapeIndex.value = null;
-}
-
-function onDragEndEtape() { dragEtapeIndex.value = null; }
+// Drag & drop : tout géré par vuedraggable (fruits, additifs, étapes)
 
 // ── Nom du pivot pour le label dynamique ──────────────────────────
 const nomPivot = computed(() => {
@@ -151,7 +120,7 @@ async function rechercherProduit(ing, q) {
     _debounce[ing._key] = setTimeout(async () => {
         ing._searching = true;
         try {
-            const res = await axios.get('/inter/produits', { params: { q } });
+            const res = await axiosPeyrounet.get('/inter/produits', { params: { q } });
             ing._suggestions = res.data?.details ?? [];
         } catch {
             ing._suggestions = [];
@@ -324,7 +293,7 @@ async function sauvegarder() {
         if (isNouvelle.value) {
             const res = await axiosCrufiture.post('/recettes', payload);
             toast.add({ severity: 'success', summary: 'Créée', detail: 'Recette créée avec succès.', life: 3000 });
-            router.replace('/dashboard/recettes/' + res.data.details.id);
+            router.push('/dashboard/recettes');
         } else {
             await axiosCrufiture.put('/recettes/' + recetteId.value + '/complet', payload);
             toast.add({ severity: 'success', summary: 'Enregistré', detail: 'Recette mise à jour.', life: 3000 });
@@ -404,22 +373,22 @@ function retourListe() {
                 <!-- ── Zone 1 : Mixture de base ─────────────── -->
                 <div class="ed-section">
                     <div class="ed-section-title">
-                        Mixture de base
+                        Mélange principal
                         <span class="ed-section-hint">Le premier fruit est la référence</span>
                     </div>
 
                     <!-- Liste fruits -->
-                    <div class="ed-fruits-list">
+                    <draggable
+                        v-model="fruits"
+                        item-key="_key"
+                        handle=".ed-drag-handle"
+                        class="ed-fruits-list"
+                        @end="onFruitDragEnd"
+                    >
+                        <template #item="{ element: fruit, index: idx }">
                         <div
-                            v-for="(fruit, idx) in fruits"
-                            :key="fruit._key"
                             class="ed-fruit-row"
-                            :class="{ 'is-pivot': fruit.type === 'pivot', 'is-dragging': dragIndex === idx }"
-                            draggable="true"
-                            @dragstart="onDragStart(idx)"
-                            @dragover="onDragOver"
-                            @drop="onDrop(idx)"
-                            @dragend="onDragEnd"
+                            :class="{ 'is-pivot': fruit.type === 'pivot' }"
                         >
                             <!-- Poignée drag -->
                             <div class="ed-drag-handle" title="Réordonner">
@@ -444,9 +413,10 @@ function retourListe() {
                                             <Button icon="pi pi-times" text rounded size="small" @click="effacerProduit(fruits[idx])" style="width:20px;height:20px;padding:0" />
                                         </div>
                                         <div v-else class="ed-produit-search">
-                                            <InputText
+                                            <input
+                                                type="text"
                                                 :placeholder="fruit.type === 'pivot' ? 'Chercher le fruit principal…' : 'Chercher un fruit…'"
-                                                class="w-full"
+                                                class="p-inputtext p-component w-full"
                                                 @input="rechercherProduit(fruits[idx], $event.target.value)"
                                             />
                                             <div v-if="fruit._suggestions.length" class="ed-suggestions">
@@ -464,7 +434,7 @@ function retourListe() {
                                     </div>
 
                                     <!-- % du pivot (sauf pour le pivot lui-même) -->
-                                    <div v-if="fruit.type !== 'pivot'" class="ed-field-inline ed-pct-field" style="flex:0 0 160px">
+                                    <div v-if="fruit.type !== 'pivot'" class="ed-field-inline ed-pct-field">
                                         <div class="ed-pct-wrapper">
                                             <InputNumber
                                                 v-model="fruits[idx].pct_base"
@@ -478,7 +448,7 @@ function retourListe() {
                                             <span class="ed-pct-label">% de {{ nomPivot }}</span>
                                         </div>
                                     </div>
-                                    <div v-else style="flex:0 0 160px" />
+                                    <div v-else class="ed-pct-field" />
 
                                     <!-- Supprimer -->
                                     <Button
@@ -492,7 +462,8 @@ function retourListe() {
                                 </div>
                             </div>
                         </div>
-                    </div>
+                        </template>
+                    </draggable>
 
                     <Button
                         label="Ajouter un fruit"
@@ -526,12 +497,18 @@ function retourListe() {
                         Aucun ingrédient supplémentaire.
                     </div>
 
-                    <div v-else class="ed-additifs-list">
-                        <div
-                            v-for="(additif, idx) in additifs"
-                            :key="additif._key"
-                            class="ed-additif-row"
-                        >
+                    <draggable
+                        v-model="additifs"
+                        item-key="_key"
+                        handle=".ed-drag-handle"
+                        class="ed-additifs-list"
+                    >
+                        <template #item="{ element: additif, index: idx }">
+                        <div class="ed-additif-row">
+                            <!-- Poignée drag -->
+                            <div class="ed-drag-handle" title="Réordonner">
+                                <i class="pi pi-bars" />
+                            </div>
                             <!-- Libellé -->
                             <div class="ed-field-inline ed-produit-field" style="flex:1">
                                 <div v-if="additif.produit_id" class="ed-produit-tag">
@@ -540,9 +517,10 @@ function retourListe() {
                                     <Button icon="pi pi-times" text rounded size="small" @click="effacerProduit(additifs[idx])" style="width:20px;height:20px;padding:0" />
                                 </div>
                                 <div v-else class="ed-produit-search">
-                                    <InputText
+                                    <input
+                                        type="text"
                                         placeholder="Chercher dans peyrounet…"
-                                        class="w-full"
+                                        class="p-inputtext p-component w-full"
                                         @input="rechercherProduit(additifs[idx], $event.target.value)"
                                     />
                                     <div v-if="additif._suggestions.length" class="ed-suggestions">
@@ -577,7 +555,8 @@ function retourListe() {
 
                             <Button icon="pi pi-trash" text rounded severity="danger" @click="supprimerAdditif(idx)" style="flex-shrink:0" />
                         </div>
-                    </div>
+                        </template>
+                    </draggable>
 
                     <Button
                         label="Ajouter un ingrédient"
@@ -615,20 +594,16 @@ function retourListe() {
                         Aucune étape définie.
                     </div>
 
-                    <div class="ed-etapes-list">
-                        <div
-                            v-for="(etape, idx) in etapes"
-                            :key="etape._key"
-                            class="ed-etape-row"
-                            :class="{ 'is-dragging': dragEtapeIndex === idx }"
-                            draggable="true"
-                            @dragstart="onDragStartEtape(idx)"
-                            @dragover="onDragOver"
-                            @drop="onDropEtape(idx)"
-                            @dragend="onDragEndEtape"
-                        >
+                    <draggable
+                        v-model="etapes"
+                        item-key="_key"
+                        handle=".ed-etape-drag-handle"
+                        class="ed-etapes-list"
+                    >
+                        <template #item="{ element: etape, index: idx }">
+                        <div class="ed-etape-row">
                             <!-- Numéro + poignée -->
-                            <div class="ed-etape-num" title="Réordonner">
+                            <div class="ed-etape-num ed-etape-drag-handle" title="Réordonner">
                                 <i class="pi pi-bars ed-etape-drag-icon" />
                                 <span>{{ idx + 1 }}</span>
                             </div>
@@ -651,7 +626,8 @@ function retourListe() {
                                 @click="supprimerEtape(idx)"
                             />
                         </div>
-                    </div>
+                        </template>
+                    </draggable>
 
                     <Button
                         label="Ajouter une étape"
@@ -673,7 +649,7 @@ function retourListe() {
 /* ── Layout 2 colonnes ───────────────────────────────────────── */
 .ed-layout {
     display: grid;
-    grid-template-columns: 1fr 420px;
+    grid-template-columns: 1fr 1fr;
     gap: 1.5rem;
     align-items: start;
 }
@@ -756,7 +732,7 @@ function retourListe() {
 .ed-fruit-row,
 .ed-additif-row {
     display: flex;
-    align-items: center;
+    align-items: start;
     gap: 0.5rem;
     padding: 0.5rem 0.625rem;
     border: 1px solid var(--surface-border);
@@ -770,9 +746,10 @@ function retourListe() {
     background: #fffbeb;
 }
 
-.ed-fruit-row.is-dragging,
-.ed-etape-row.is-dragging {
-    opacity: 0.5;
+/* Vuedraggable ghost — élément en cours de drag */
+.sortable-ghost {
+    opacity: 0.4;
+    background: var(--surface-100, #f5f5f5);
 }
 
 .ed-drag-handle {
@@ -796,9 +773,14 @@ function retourListe() {
 }
 
 .ed-fruit-row1 {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 1fr 160px auto;
+    align-items: start;
     gap: 0.5rem;
+}
+
+.ed-pct-field {
+    min-width: 0;
 }
 
 .ed-field-inline {

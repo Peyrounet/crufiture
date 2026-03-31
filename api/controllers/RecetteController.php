@@ -419,12 +419,13 @@ class RecetteController
 
             if ($produit_id === 0) continue;
 
-            // bind_param ne supporte pas les NULL via variable directe —
-            // utiliser bind_param avec 's' et null fonctionne en PHP 7.4
+            // pct_base NULL doit passer par bind_param avec type 's' en PHP 7.4
+            $pct_base_bind = ($pct_base !== null) ? (string) $pct_base : null;
+
             $stmt->bind_param(
-                'iisdsi',
+                'iisssi',
                 $recette_id, $produit_id, $type,
-                $pct_base, $note, $ordre
+                $pct_base_bind, $note, $ordre
             );
             $stmt->execute();
         }

@@ -8,7 +8,16 @@
 - ✅ Corriger double flèche menu "Retour ferme"
 - ✅ Layout simulateur responsive (CSS grid natif + inputClass sim-input)
 - ✅ **Gestion des saveurs** — CRUD `cruf_saveur` + liste cards avec avatar + recherche live
-- 🔧 **Gestion des recettes** — code livré (RecetteController + GestionRecettes + EditionRecette), bugs en cours de correction en nouvelle discussion
+- ✅ **Gestion des recettes** — liste groupée par saveur (GestionRecettes.vue)
+- ✅ **Édition recette** — création + édition complète (EditionRecette.vue)
+  - Drag & drop fruits / additifs / étapes via `vuedraggable`
+  - Autocomplétion produits peyrounet (`axiosPeyrounet` → `/inter/produits`)
+  - Champs de recherche en `<input>` natif (bug InputText PrimeVue dans v-for)
+  - Layout 50/50 (colonne gauche : ingrédients, colonne droite : étapes sticky)
+  - Après création → retour liste
+- ✅ Migration BDD `cruf_recette_etape` (absente du schema v1)
+- ✅ Ajout `axiosPeyrounet.js` dans `src/plugins/`
+- ✅ Ajout `vuedraggable@^4.1.0` dans `package.json`
 
 ---
 

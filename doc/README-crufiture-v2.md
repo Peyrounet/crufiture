@@ -1,5 +1,5 @@
 # Module /crufiture — Document de référence
-**v3 — 31 mars 2026**
+**v4 — 31 mars 2026**
 *À fournir en début de toute nouvelle discussion sur ce module*
 
 ---
@@ -17,12 +17,12 @@ Module métier de la ferme du Peyrounet. Consomme `/monpanier` (auth, BDD) et `/
 | Variable .env | `CRUFITURE_FOLDER=/crufiture` |
 | Activité comptable | Cruficulture [id=5] |
 | Thème | aura-light-amber |
-| Statut | En production — v3 (saveurs + recettes déployées, bugs en cours) |
+| Statut | En production — v4 (saveurs + recettes opérationnelles) |
 
 ### Dépendances
 
 - `/monpanier` — auth JWT, BDD MySQL, emails
-- `/peyrounet` — compta (`POST /compta/ecriture`), relevés de prix (`POST /inter/prix-revient`)
+- `/peyrounet` — compta (`POST /compta/ecriture`), relevés de prix (`POST /inter/prix-revient`), autocomplétion produits (`GET /inter/produits`)
 - `/ferme` — expose `GET /crufiture/api/ferme-widget` (contrat ferme-widget v1)
 
 ---
@@ -39,6 +39,7 @@ Module métier de la ferme du Peyrounet. Consomme `/monpanier` (auth, BDD) et `/
 | Auth | Cookie JWT peyrounet.com via /monpanier |
 | Thème | aura-light-amber depuis /monpanier/themes/ |
 | CSS | PrimeFlex + layout SCSS copié depuis foretfeerique/src/assets/ |
+| Drag & drop | `vuedraggable@^4.1.0` (ajouté dans package.json) |
 
 ---
 
@@ -51,7 +52,7 @@ Module métier de la ferme du Peyrounet. Consomme `/monpanier` (auth, BDD) et `/
 | `cruf_saveur` | Référentiel des saveurs avec paramètres de formulation par défaut (brix_cible, pa_cible, pct_fructose) |
 | `cruf_recette` | Fiche technique de préparation liée à une saveur — plusieurs versions peuvent coexister |
 | `cruf_recette_ingredient` | Ingrédients d'une recette — `type` pivot/fruit/additif, `pct_base`, lien obligatoire vers `rp_produit` |
-| `cruf_recette_etape` | Étapes de préparation ordonnées et réordonnables (remplace `instructions` TEXT de cruf_recette) |
+| `cruf_recette_etape` | Étapes de préparation ordonnées et réordonnables — **créée en migration** (absente du schema_v1.sql) |
 | `cruf_lot` | Cœur du module — un lot = une session de production complète |
 | `cruf_lot_fruit` | Fruits/légumes d'un lot avec traçabilité (fournisseur, origine, poids) |
 | `cruf_jarre` | Stockage en jarres (1 à 3 par lot) avec poids initial et poids actuel |
@@ -139,7 +140,7 @@ poids_brut_nécessaire = cible_souhaitée / rendement_pulpe_cruf / rendement_bru
 | `DELETE /crufiture/api/saveurs/:id` | Supprimer (physique) ou désactiver (si lots rattachés) |
 | `GET /crufiture/api/recettes` | Liste toutes les recettes avec saveur, nb ingrédients, nb étapes |
 | `GET /crufiture/api/recettes/:id` | Recette complète avec ingrédients (jointure rp_produit) et étapes |
-| `POST /crufiture/api/recettes` | Créer une recette (version auto-incrémentée par saveur) |
+| `POST /crufiture/api/recettes` | Créer une recette → redirige vers liste après création |
 | `POST /crufiture/api/recettes/:id/dupliquer` | Nouvelle version à partir d'une recette existante |
 | `PUT /crufiture/api/recettes/:id` | Modifier titre et note uniquement |
 | `PUT /crufiture/api/recettes/:id/complet` | Sauvegarde complète (titre + note + ingrédients + étapes) |
@@ -168,7 +169,7 @@ crufiture/api/
     ├── FermeWidgetController.php
     ├── DashboardController.php
     ├── SaveurController.php       ← v2
-    └── RecetteController.php      ← v3
+    └── RecetteController.php      ← v4 (bug bind_param NULL corrigé)
 ```
 
 ### Frontend (Vue 3)
@@ -186,7 +187,8 @@ crufiture/src/
 │   └── AppMenuItem.vue
 ├── plugins/
 │   ├── axios.js                   ← baseURL /monpanier/api
-│   └── axiosCrufiture.js          ← baseURL /crufiture/api
+│   ├── axiosCrufiture.js          ← baseURL /crufiture/api
+│   └── axiosPeyrounet.js          ← baseURL /peyrounet/api (ajouté v4)
 ├── router/index.js                ← routes : dashboard, simulateur, saveurs, recettes, recettes/:id
 ├── stores/
 │   ├── authStore.js
@@ -199,8 +201,8 @@ crufiture/src/
         ├── DashboardCrufiture.vue
         ├── SimulateurFormulation.vue
         ├── GestionSaveurs.vue     ← v2
-        ├── GestionRecettes.vue    ← v3 — liste groupée par saveur
-        └── EditionRecette.vue     ← v3 — page dédiée édition complète
+        ├── GestionRecettes.vue    ← v4
+        └── EditionRecette.vue     ← v4 — drag vuedraggable, input natif, layout 50/50
 ```
 
 ---
@@ -249,9 +251,18 @@ Les ingrédients sont stockés dans `cruf_recette_ingredient` avec trois types (
 - `type = 'fruit'` → autre fruit de la mixture. `pct_base = % du pivot`.
 - `type = 'additif'` → ingrédient supplémentaire (fleurs, épices, jus…). `pct_base = % de la base totale`.
 
-Chaque ingrédient est obligatoirement lié à un `produit_id` dans `rp_produit` (peyrounet). Le libellé affiché est `rp_produit.libelle_canonique` obtenu par jointure — pas de copie locale. Toutes les quantités sont en poids, l'affichage kg/g est déterminé à la volée selon la valeur (comme le simulateur).
+Chaque ingrédient est obligatoirement lié à un `produit_id` dans `rp_produit` (peyrounet). Le libellé affiché est `rp_produit.libelle_canonique` obtenu par jointure — pas de copie locale.
 
-Les étapes de préparation sont stockées dans `cruf_recette_etape` — ordonnées, réordonnables via drag-and-drop. Le champ `instructions` TEXT de `cruf_recette` est conservé pour compatibilité mais n'est plus utilisé.
+Les étapes de préparation sont stockées dans `cruf_recette_etape` — ordonnées, réordonnables via drag-and-drop (vuedraggable). Le champ `instructions` TEXT de `cruf_recette` est conservé pour compatibilité mais n'est plus utilisé.
+
+### EditionRecette.vue — points techniques clés
+
+- **Drag & drop** : `vuedraggable` sur les 3 listes (fruits, additifs, étapes) — même techno, même rendu. `handle=".ed-drag-handle"` pour fruits/additifs, `handle=".ed-etape-drag-handle"` pour étapes.
+- **Champs de recherche produit** : `<input>` HTML natif (pas `InputText` PrimeVue) — `InputText` dans un `v-for` bloque la saisie souris dans ce contexte (bug PrimeVue confirmé).
+- **Autocomplétion** : `GET /peyrounet/api/inter/produits?q=xxx` via `axiosPeyrounet`. Debounce 300ms par ingrédient via `ing._key`.
+- **Layout** : 2 colonnes 50/50 (`grid-template-columns: 1fr 1fr`). Colonne gauche : infos + mélange + additifs. Colonne droite : étapes (sticky).
+- **Grid interne lignes fruit** : `grid-template-columns: 1fr 160px auto` avec `align-items: start` — champ produit, champ %, bouton poubelle.
+- **Après création** : redirection vers `/dashboard/recettes` (liste), pas vers la page d'édition.
 
 ### Duplication / nouvelle version
 
@@ -278,7 +289,7 @@ Résultat : coût HT matière / `poids_reel_kg` = coût HT par kg produit.
 | `index.php` | Copie EXACTE de foretfeerique. Ne jamais modifier. |
 | `$mysqli` | Variable de connexion BDD dans tous les controllers. Jamais `$conn`, jamais `$db`. |
 | `ResponseHelper` | `echo ResponseHelper::jsonResponse($message, $status, $details, $statusCode)`. Toujours `echo` devant, toujours `use helpers\ResponseHelper` en tête. |
-| `bind_param` types | Types valides : `s`, `i`, `d`, `b` uniquement. Un type invalide échoue silencieusement. `actif` et `id` sont des `i`. DECIMAL → `d`. |
+| `bind_param` types | Types valides : `s`, `i`, `d`, `b` uniquement. Valeur NULLable → toujours type `'s'` avec variable intermédiaire. Un type invalide échoue silencieusement. |
 | Cast TINYINT | Toujours `(int) $row['actif']`. PHP retourne une string `"1"` et Vue évalue `"1" === 1` à `false`. |
 | Cast DECIMAL | Toujours `(float) $row['brix_cible']` etc. Même raison. |
 | `v-for` + `v-model` | Dans un `v-for="(item, idx) in monRef"`, toujours `v-model="monRef[idx].prop"` et non `v-model="item.prop"`. |
@@ -290,10 +301,11 @@ Résultat : coût HT matière / `poids_reel_kg` = coût HT par kg produit.
 | Barre de recherche | Utiliser `IconField` + `InputIcon` — pas `p-input-icon-left` (rendu cassé). |
 | Suppression saveur | Soft-delete si lots rattachés (`actif=0`), suppression physique sinon. Flag `actif` non exposé dans l'UI. |
 | Suppression recette | Même règle : soft-delete si lots rattachés, suppression physique + cascade ingrédients + étapes sinon. |
-| `cruf_recette_ingredient.produit_id` | NOT NULL — un ingrédient doit toujours référencer un produit existant dans `rp_produit`. Libellé affiché via jointure `JOIN rp_produit p ON p.id = i.produit_id`. |
+| `cruf_recette_ingredient.produit_id` | NOT NULL — un ingrédient doit toujours référencer un produit existant dans `rp_produit`. Libellé affiché via jointure. |
 | `cruf_recette_ingredient.type` | Géré par l'appli selon la zone de saisie UI (fruits vs additifs). Jamais exposé à l'utilisateur. |
-| Autocomplétion produits | `GET /peyrounet/api/inter/produits?q=xxx` via instance `axios` (baseURL `/monpanier/api`). Debounce 300ms par ingrédient. |
-| `produit_lib` dans Vue | Propriété réactive locale — ne pas confondre avec `libelle_canonique` retourné par l'API. Alimenté par `selectionnerProduit()`. |
+| Autocomplétion produits | `GET /peyrounet/api/inter/produits?q=xxx` via `axiosPeyrounet` (baseURL `/peyrounet/api`). Pas via `axios` (baseURL `/monpanier/api`). |
+| `InputText` dans `v-for` | Bug PrimeVue confirmé : bloque la saisie souris. Utiliser `<input type="text" class="p-inputtext p-component">` natif à la place. |
+| `vuedraggable` | Installé (`^4.1.0`). Import : `import draggable from 'vuedraggable'`. Toujours utiliser `handle` pour ne pas bloquer les inputs enfants. |
 
 ---
 
@@ -302,11 +314,26 @@ Résultat : coût HT matière / `poids_reel_kg` = coût HT par kg produit.
 ### Ordre de déploiement initial (fait)
 
 1. Importer `schema_crufiture_v1.sql` dans phpMyAdmin
-2. Ajouter `CRUFITURE_FOLDER=/crufiture` dans `public_html/.env`
-3. Copier `api/` dans `public_html/crufiture/api/`
-4. Ajouter les règles `.htaccess` (voir ci-dessous)
-5. `npm install && npm run build` → déployer `dist/` dans `public_html/crufiture/`
-6. Enregistrer dans `/peyrounet/dashboard/parametres/modules` (slug: `crufiture`)
+2. Exécuter la migration `cruf_recette_etape` (absente du schema v1)
+3. Ajouter `CRUFITURE_FOLDER=/crufiture` dans `public_html/.env`
+4. Copier `api/` dans `public_html/crufiture/api/`
+5. Ajouter les règles `.htaccess` (voir ci-dessous)
+6. `npm install && npm run build` → déployer `dist/` dans `public_html/crufiture/`
+7. Enregistrer dans `/peyrounet/dashboard/parametres/modules` (slug: `crufiture`)
+
+### Migration cruf_recette_etape
+
+```sql
+CREATE TABLE cruf_recette_etape (
+    id          INT UNSIGNED     AUTO_INCREMENT PRIMARY KEY,
+    recette_id  INT UNSIGNED     NOT NULL,
+    ordre       TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    contenu     TEXT             NOT NULL,
+    created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recette_id) REFERENCES cruf_recette(id),
+    INDEX idx_recette_ordre (recette_id, ordre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
 
 ### Règles .htaccess
 
@@ -333,9 +360,9 @@ RewriteRule ^crufiture/ /crufiture/index.html [L]
 - `/dashboard/simulateur` → exemple betterave → résultats corrects
 - `/dashboard/saveurs` → liste + création + modification + suppression
 - `/dashboard/recettes` → liste groupée par saveur
-- `/dashboard/recettes/nouvelle` → création avec fruits + additifs + étapes
+- `/dashboard/recettes/nouvelle` → création avec fruits + additifs + étapes → retour liste
 - `/dashboard/recettes/:id` → édition + sauvegarde + duplication
 
 ---
 
-*Ferme du Peyrounet — Module /crufiture v3 — 31 mars 2026*
+*Ferme du Peyrounet — Module /crufiture v4 — 31 mars 2026*
