@@ -33,6 +33,12 @@ const routes = [
                 component: () => import('@/views/admin/SimulateurFormulation.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Simulateur de formulation' },
             },
+            {
+                path: 'saveurs',
+                name: 'Saveurs',
+                component: () => import('@/views/admin/GestionSaveurs.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Saveurs' },
+            },
         ],
     },
     { path: '/unauthorized', name: 'Unauthorized', component: () => import('@/views/common/Error.vue') },

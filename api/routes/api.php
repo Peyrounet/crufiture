@@ -7,6 +7,7 @@
 require_once './controllers/PingController.php';
 require_once './controllers/FermeWidgetController.php';
 require_once './controllers/DashboardController.php';
+require_once './controllers/SaveurController.php';
 
 use helpers\ResponseHelper;
 
@@ -15,6 +16,7 @@ $mysqli = (new Database())->getConnection();
 $pingCtrl      = new PingController();
 $widgetCtrl    = new FermeWidgetController($mysqli);
 $dashboardCtrl = new DashboardController($mysqli);
+$saveurCtrl    = new SaveurController($mysqli);
 
 $prefix = $_ENV['CRUFITURE_FOLDER'] ?? '/crufiture';
 $api    = $prefix . '/api';
@@ -33,6 +35,40 @@ switch ($method) {
 
         } elseif ($uri === $api . '/dashboard') {
             $dashboardCtrl->getDashboard();
+
+        } elseif ($uri === $api . '/saveurs') {
+            $saveurCtrl->getAll();
+
+        } else {
+            echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
+        }
+        break;
+
+    case 'POST':
+        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        if ($uri === $api . '/saveurs') {
+            $saveurCtrl->create($data);
+
+        } else {
+            echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
+        }
+        break;
+
+    case 'PUT':
+        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        if (preg_match('#^' . preg_quote($api, '#') . '/saveurs/(\d+)$#', $uri, $m)) {
+            $saveurCtrl->update($m[1], $data);
+
+        } else {
+            echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
+        }
+        break;
+
+    case 'DELETE':
+        if (preg_match('#^' . preg_quote($api, '#') . '/saveurs/(\d+)$#', $uri, $m)) {
+            $saveurCtrl->delete($m[1]);
 
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);

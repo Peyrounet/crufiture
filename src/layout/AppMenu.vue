@@ -22,11 +22,6 @@ const menuModel = computed(() => [
                 to: '/dashboard/simulateur',
             },
             {
-                label: 'Lots',
-                icon: 'pi pi-fw pi-list',
-                to: '/dashboard/lots',
-            },
-            {
                 label: 'Saveurs',
                 icon: 'pi pi-fw pi-tag',
                 to: '/dashboard/saveurs',
@@ -35,6 +30,11 @@ const menuModel = computed(() => [
                 label: 'Recettes',
                 icon: 'pi pi-fw pi-book',
                 to: '/dashboard/recettes',
+            },
+            {
+                label: 'Lots',
+                icon: 'pi pi-fw pi-list',
+                to: '/dashboard/lots',
             },
         ],
     },
