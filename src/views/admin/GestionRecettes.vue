@@ -12,6 +12,9 @@ const recettes  = ref([]);
 const loading   = ref(true);
 const recherche = ref('');
 
+// Saveurs dont les anciennes versions sont dépliées
+const deplies = ref(new Set());
+
 onMounted(charger);
 
 async function charger() {
@@ -37,7 +40,6 @@ const groupes = computed(() => {
           )
         : recettes.value;
 
-    // Grouper par saveur_id
     const map = new Map();
     for (const r of filtrees) {
         if (!map.has(r.saveur_id)) {
@@ -45,8 +47,25 @@ const groupes = computed(() => {
         }
         map.get(r.saveur_id).recettes.push(r);
     }
+
+    // Trier chaque groupe par version décroissante
+    for (const g of map.values()) {
+        g.recettes.sort((a, b) => b.version - a.version);
+    }
+
     return Array.from(map.values());
 });
+
+// ── Toggle dépliant ───────────────────────────────────────────────
+function toggleDeplier(saveurId) {
+    if (deplies.value.has(saveurId)) {
+        deplies.value.delete(saveurId);
+    } else {
+        deplies.value.add(saveurId);
+    }
+    // Forcer la réactivité du Set
+    deplies.value = new Set(deplies.value);
+}
 
 // ── Avatar couleur stable ─────────────────────────────────────────
 const COULEURS = [
@@ -156,65 +175,129 @@ async function supprimer() {
         <div v-else class="rec-groupes">
             <div v-for="groupe in groupes" :key="groupe.saveur_id" class="rec-groupe">
 
-                <!-- Header saveur -->
-                <div class="rec-groupe-header">
+                <!-- Ligne principale = saveur + recette la plus récente -->
+                <div class="rec-ligne-principale">
+
+                    <!-- Avatar saveur -->
                     <div
                         class="rec-saveur-avatar"
                         :style="{ background: couleurAvatar(groupe.saveur_nom) }"
                     >
                         {{ initiales(groupe.saveur_nom) }}
                     </div>
+
+                    <!-- Nom saveur -->
                     <span class="rec-saveur-nom">{{ groupe.saveur_nom }}</span>
-                    <span class="rec-saveur-count">{{ groupe.recettes.length }} recette{{ groupe.recettes.length > 1 ? 's' : '' }}</span>
+
+                    <!-- Séparateur visuel -->
+                    <span class="rec-separateur">·</span>
+
+                    <!-- Badge version -->
+                    <div class="rec-version-badge">v{{ groupe.recettes[0].version }}</div>
+
+                    <!-- Titre recette -->
+                    <span
+                        class="rec-titre-principal"
+                        @click="ouvrirRecette(groupe.recettes[0].id)"
+                    >{{ groupe.recettes[0].titre }}</span>
+
+                    <!-- Meta chips -->
+                    <div class="rec-meta-inline">
+                        <span class="rec-meta-chip">
+                            <i class="pi pi-list" style="font-size:10px" />
+                            {{ groupe.recettes[0].nb_ingredients }} ingrédient{{ groupe.recettes[0].nb_ingredients > 1 ? 's' : '' }}
+                        </span>
+                        <span class="rec-meta-chip">
+                            <i class="pi pi-align-left" style="font-size:10px" />
+                            {{ groupe.recettes[0].nb_etapes }} étape{{ groupe.recettes[0].nb_etapes > 1 ? 's' : '' }}
+                        </span>
+                        <span v-if="groupe.recettes[0].actif === 0" class="rec-meta-chip rec-chip-inactive">
+                            Désactivée
+                        </span>
+                    </div>
+
+                    <!-- Actions recette principale -->
+                    <div class="rec-card-actions" @click.stop>
+                        <Button
+                            icon="pi pi-copy"
+                            text rounded size="small"
+                            v-tooltip.top="'Nouvelle version'"
+                            :loading="duplicating === groupe.recettes[0].id"
+                            @click="dupliquer(groupe.recettes[0])"
+                        />
+                        <Button
+                            icon="pi pi-pencil"
+                            text rounded size="small"
+                            v-tooltip.top="'Éditer'"
+                            @click="ouvrirRecette(groupe.recettes[0].id)"
+                        />
+                        <Button
+                            icon="pi pi-trash"
+                            text rounded size="small"
+                            severity="danger"
+                            v-tooltip.top="'Supprimer'"
+                            @click="confirmerSuppression(groupe.recettes[0])"
+                        />
+                    </div>
+
+                    <!-- Toggle versions anciennes (uniquement si > 1 recette) -->
+                    <button
+                        v-if="groupe.recettes.length > 1"
+                        class="rec-toggle-versions"
+                        @click="toggleDeplier(groupe.saveur_id)"
+                        :title="deplies.has(groupe.saveur_id) ? 'Masquer les versions précédentes' : 'Voir les versions précédentes'"
+                    >
+                        <span class="rec-toggle-count">{{ groupe.recettes.length - 1 }} v. précédente{{ groupe.recettes.length > 2 ? 's' : '' }}</span>
+                        <i
+                            class="pi"
+                            :class="deplies.has(groupe.saveur_id) ? 'pi-chevron-up' : 'pi-chevron-down'"
+                            style="font-size: 10px"
+                        />
+                    </button>
+
                 </div>
 
-                <!-- Cards recettes de ce groupe -->
-                <div class="rec-list">
+                <!-- Versions précédentes (dépliées) -->
+                <div
+                    v-if="groupe.recettes.length > 1 && deplies.has(groupe.saveur_id)"
+                    class="rec-versions-precedentes"
+                >
                     <div
-                        v-for="recette in groupe.recettes"
+                        v-for="recette in groupe.recettes.slice(1)"
                         :key="recette.id"
-                        class="rec-card"
-                        @click="ouvrirRecette(recette.id)"
+                        class="rec-ligne-ancienne"
                     >
-                        <!-- Badge version -->
-                        <div class="rec-version-badge">v{{ recette.version }}</div>
+                        <div class="rec-version-badge rec-version-ancienne">v{{ recette.version }}</div>
 
-                        <!-- Corps -->
-                        <div class="rec-card-body">
-                            <div class="rec-card-titre">{{ recette.titre }}</div>
-                            <div class="rec-card-meta">
-                                <span class="rec-meta-chip">
-                                    <i class="pi pi-list" style="font-size:10px" />
-                                    {{ recette.nb_ingredients }} ingrédient{{ recette.nb_ingredients > 1 ? 's' : '' }}
-                                </span>
-                                <span class="rec-meta-chip">
-                                    <i class="pi pi-align-left" style="font-size:10px" />
-                                    {{ recette.nb_etapes }} étape{{ recette.nb_etapes > 1 ? 's' : '' }}
-                                </span>
-                                <span v-if="recette.actif === 0" class="rec-meta-chip rec-chip-inactive">
-                                    Désactivée
-                                </span>
-                            </div>
+                        <span
+                            class="rec-titre-ancien"
+                            @click="ouvrirRecette(recette.id)"
+                        >{{ recette.titre }}</span>
+
+                        <div class="rec-meta-inline">
+                            <span class="rec-meta-chip">
+                                <i class="pi pi-list" style="font-size:10px" />
+                                {{ recette.nb_ingredients }} ingrédient{{ recette.nb_ingredients > 1 ? 's' : '' }}
+                            </span>
+                            <span class="rec-meta-chip">
+                                <i class="pi pi-align-left" style="font-size:10px" />
+                                {{ recette.nb_etapes }} étape{{ recette.nb_etapes > 1 ? 's' : '' }}
+                            </span>
+                            <span v-if="recette.actif === 0" class="rec-meta-chip rec-chip-inactive">
+                                Désactivée
+                            </span>
                         </div>
 
-                        <!-- Actions — stopper propagation du click card -->
                         <div class="rec-card-actions" @click.stop>
                             <Button
-                                icon="pi pi-copy"
-                                text rounded
-                                v-tooltip.top="'Nouvelle version'"
-                                :loading="duplicating === recette.id"
-                                @click="dupliquer(recette)"
-                            />
-                            <Button
                                 icon="pi pi-pencil"
-                                text rounded
-                                v-tooltip.top="'Éditer'"
+                                text rounded size="small"
+                                v-tooltip.top="'Ouvrir'"
                                 @click="ouvrirRecette(recette.id)"
                             />
                             <Button
                                 icon="pi pi-trash"
-                                text rounded
+                                text rounded size="small"
                                 severity="danger"
                                 v-tooltip.top="'Supprimer'"
                                 @click="confirmerSuppression(recette)"
@@ -267,18 +350,26 @@ async function supprimer() {
 .rec-groupes {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0;
 }
 
-.rec-groupe-header {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    margin-bottom: 0.5rem;
-    padding-bottom: 0.5rem;
+.rec-groupe {
     border-bottom: 1px solid var(--surface-border);
 }
 
+.rec-groupe:last-child {
+    border-bottom: none;
+}
+
+/* ── Ligne principale ────────────────────────────────────────── */
+.rec-ligne-principale {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.625rem 0.25rem;
+}
+
+/* ── Avatar saveur ───────────────────────────────────────────── */
 .rec-saveur-avatar {
     flex-shrink: 0;
     width: 28px;
@@ -296,37 +387,15 @@ async function supprimer() {
     font-weight: 700;
     font-size: 14px;
     color: var(--text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
-.rec-saveur-count {
-    font-size: 12px;
-    color: #aaa;
-    margin-left: auto;
-}
-
-/* ── Liste de cards ──────────────────────────────────────────── */
-.rec-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-    padding-left: 0.25rem;
-}
-
-.rec-card {
-    display: flex;
-    align-items: center;
-    gap: 0.875rem;
-    padding: 0.625rem 0.875rem;
-    border: 1px solid var(--surface-border);
-    border-radius: 8px;
-    background: var(--surface-card);
-    cursor: pointer;
-    transition: box-shadow 0.15s, border-color 0.15s;
-}
-
-.rec-card:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    border-color: var(--primary-300, #fbbf24);
+.rec-separateur {
+    color: var(--surface-border);
+    font-size: 16px;
+    flex-shrink: 0;
+    line-height: 1;
 }
 
 /* ── Badge version ───────────────────────────────────────────── */
@@ -343,27 +412,31 @@ async function supprimer() {
     white-space: nowrap;
 }
 
-/* ── Corps card ──────────────────────────────────────────────── */
-.rec-card-body {
-    flex: 1;
-    min-width: 0;
-}
-
-.rec-card-titre {
-    font-weight: 600;
-    font-size: 14px;
+/* ── Titre recette principale ────────────────────────────────── */
+.rec-titre-principal {
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-color);
-    margin-bottom: 3px;
+    cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex-shrink: 1;
+    min-width: 0;
 }
 
-.rec-card-meta {
+.rec-titre-principal:hover {
+    color: var(--primary-color, #f59e0b);
+    text-decoration: underline;
+}
+
+/* ── Meta chips ──────────────────────────────────────────────── */
+.rec-meta-inline {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    flex-wrap: wrap;
+    flex-shrink: 0;
+    margin-left: auto;
 }
 
 .rec-meta-chip {
@@ -371,7 +444,8 @@ async function supprimer() {
     align-items: center;
     gap: 3px;
     font-size: 11px;
-    color: #999;
+    color: #bbb;
+    white-space: nowrap;
 }
 
 .rec-chip-inactive {
@@ -386,7 +460,76 @@ async function supprimer() {
 .rec-card-actions {
     flex-shrink: 0;
     display: flex;
-    gap: 2px;
+    gap: 0;
+}
+
+/* ── Toggle versions ─────────────────────────────────────────── */
+.rec-toggle-versions {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--surface-border);
+    border-radius: 5px;
+    background: transparent;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-color-secondary);
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+    line-height: 1.4;
+}
+
+.rec-toggle-versions:hover {
+    background: var(--surface-50, #fafafa);
+    border-color: var(--primary-300, #fbbf24);
+    color: var(--text-color);
+}
+
+.rec-toggle-count {
+    font-size: 11px;
+}
+
+/* ── Versions précédentes ────────────────────────────────────── */
+.rec-versions-precedentes {
+    padding: 0 0 0.5rem 2.375rem; /* aligné après l'avatar */
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.rec-ligne-ancienne {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.375rem 0.25rem;
+    border-radius: 6px;
+    transition: background 0.12s;
+}
+
+.rec-ligne-ancienne:hover {
+    background: var(--surface-50, #fafafa);
+}
+
+.rec-version-ancienne {
+    opacity: 0.65;
+}
+
+.rec-titre-ancien {
+    font-size: 13px;
+    color: var(--text-color-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.rec-titre-ancien:hover {
+    color: var(--primary-color, #f59e0b);
+    text-decoration: underline;
 }
 
 /* ── États ───────────────────────────────────────────────────── */
