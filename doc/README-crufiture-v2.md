@@ -1,5 +1,5 @@
 # Module /crufiture — Document de référence
-**v2 — 31 mars 2026**
+**v3 — 31 mars 2026**
 *À fournir en début de toute nouvelle discussion sur ce module*
 
 ---
@@ -17,7 +17,7 @@ Module métier de la ferme du Peyrounet. Consomme `/monpanier` (auth, BDD) et `/
 | Variable .env | `CRUFITURE_FOLDER=/crufiture` |
 | Activité comptable | Cruficulture [id=5] |
 | Thème | aura-light-amber |
-| Statut | En production — v2 (saveurs déployées) |
+| Statut | En production — v3 (saveurs + recettes déployées, bugs en cours) |
 
 ### Dépendances
 
@@ -44,13 +44,14 @@ Module métier de la ferme du Peyrounet. Consomme `/monpanier` (auth, BDD) et `/
 
 ## 3. Schéma BDD — tables cruf_*
 
-8 tables dans la base `u191509486_dbboutique`. Toutes préfixées `cruf_*`.
+9 tables dans la base `u191509486_dbboutique`. Toutes préfixées `cruf_*`.
 
 | Table | Rôle |
 |---|---|
 | `cruf_saveur` | Référentiel des saveurs avec paramètres de formulation par défaut (brix_cible, pa_cible, pct_fructose) |
-| `cruf_recette` | Fiche technique de préparation liée à une saveur (instructions texte) |
-| `cruf_recette_ingredient` | Ingrédients d'une recette avec proportion % de la base (pct_base NULL = fruit pivot) |
+| `cruf_recette` | Fiche technique de préparation liée à une saveur — plusieurs versions peuvent coexister |
+| `cruf_recette_ingredient` | Ingrédients d'une recette — `type` pivot/fruit/additif, `pct_base`, lien obligatoire vers `rp_produit` |
+| `cruf_recette_etape` | Étapes de préparation ordonnées et réordonnables (remplace `instructions` TEXT de cruf_recette) |
 | `cruf_lot` | Cœur du module — un lot = une session de production complète |
 | `cruf_lot_fruit` | Fruits/légumes d'un lot avec traçabilité (fournisseur, origine, poids) |
 | `cruf_jarre` | Stockage en jarres (1 à 3 par lot) avec poids initial et poids actuel |
@@ -136,6 +137,13 @@ poids_brut_nécessaire = cible_souhaitée / rendement_pulpe_cruf / rendement_bru
 | `POST /crufiture/api/saveurs` | Créer une saveur |
 | `PUT /crufiture/api/saveurs/:id` | Modifier une saveur |
 | `DELETE /crufiture/api/saveurs/:id` | Supprimer (physique) ou désactiver (si lots rattachés) |
+| `GET /crufiture/api/recettes` | Liste toutes les recettes avec saveur, nb ingrédients, nb étapes |
+| `GET /crufiture/api/recettes/:id` | Recette complète avec ingrédients (jointure rp_produit) et étapes |
+| `POST /crufiture/api/recettes` | Créer une recette (version auto-incrémentée par saveur) |
+| `POST /crufiture/api/recettes/:id/dupliquer` | Nouvelle version à partir d'une recette existante |
+| `PUT /crufiture/api/recettes/:id` | Modifier titre et note uniquement |
+| `PUT /crufiture/api/recettes/:id/complet` | Sauvegarde complète (titre + note + ingrédients + étapes) |
+| `DELETE /crufiture/api/recettes/:id` | Supprimer (physique) ou désactiver (si lots rattachés) |
 
 ### Contrat ferme-widget — KPIs remontés
 
@@ -159,7 +167,8 @@ crufiture/api/
     ├── PingController.php
     ├── FermeWidgetController.php
     ├── DashboardController.php
-    └── SaveurController.php       ← v2
+    ├── SaveurController.php       ← v2
+    └── RecetteController.php      ← v3
 ```
 
 ### Frontend (Vue 3)
@@ -178,7 +187,7 @@ crufiture/src/
 ├── plugins/
 │   ├── axios.js                   ← baseURL /monpanier/api
 │   └── axiosCrufiture.js          ← baseURL /crufiture/api
-├── router/index.js                ← routes : dashboard, simulateur, saveurs
+├── router/index.js                ← routes : dashboard, simulateur, saveurs, recettes, recettes/:id
 ├── stores/
 │   ├── authStore.js
 │   └── userStore.js
@@ -189,7 +198,9 @@ crufiture/src/
     └── admin/
         ├── DashboardCrufiture.vue
         ├── SimulateurFormulation.vue
-        └── GestionSaveurs.vue     ← v2
+        ├── GestionSaveurs.vue     ← v2
+        ├── GestionRecettes.vue    ← v3 — liste groupée par saveur
+        └── EditionRecette.vue     ← v3 — page dédiée édition complète
 ```
 
 ---
@@ -224,15 +235,27 @@ Page `/dashboard/saveurs` — CRUD complet sur `cruf_saveur`.
 
 ---
 
-## 9. Recettes et prix de revient
+## 9. Gestion des recettes
+
+Page `/dashboard/recettes` — liste groupée par saveur, page dédiée `/dashboard/recettes/:id` pour l'édition.
 
 ### Structure d'une recette
 
-Une recette est liée à une saveur. Elle contient des instructions texte + une liste d'ingrédients :
+Une recette est liée à une saveur. Plusieurs versions peuvent coexister — la version est auto-incrémentée par saveur. Les anciennes versions sont conservées pour la traçabilité des lots.
 
-- `pct_base = NULL` → fruit principal (= la base). Quantité réelle = `base_kg`.
-- `pct_base > 0` → additif (fleurs, épices, jus citron…). Quantité réelle = `base_kg × (pct_base / 100)`.
-- Fructose et saccharose sont implicites — quantités issues des calculs de formulation.
+Les ingrédients sont stockés dans `cruf_recette_ingredient` avec trois types (gérés par l'appli, non exposés dans l'UI) :
+
+- `type = 'pivot'` → fruit de référence, un seul par recette. `pct_base = NULL`. Les proportions des autres fruits sont exprimées en % de ce fruit.
+- `type = 'fruit'` → autre fruit de la mixture. `pct_base = % du pivot`.
+- `type = 'additif'` → ingrédient supplémentaire (fleurs, épices, jus…). `pct_base = % de la base totale`.
+
+Chaque ingrédient est obligatoirement lié à un `produit_id` dans `rp_produit` (peyrounet). Le libellé affiché est `rp_produit.libelle_canonique` obtenu par jointure — pas de copie locale. Toutes les quantités sont en poids, l'affichage kg/g est déterminé à la volée selon la valeur (comme le simulateur).
+
+Les étapes de préparation sont stockées dans `cruf_recette_etape` — ordonnées, réordonnables via drag-and-drop. Le champ `instructions` TEXT de `cruf_recette` est conservé pour compatibilité mais n'est plus utilisé.
+
+### Duplication / nouvelle version
+
+`POST /recettes/:id/dupliquer` crée une nouvelle version (version max+1) en copiant ingrédients et étapes. La recette source est conservée intacte.
 
 ### Calcul du prix de revient
 
@@ -266,6 +289,11 @@ Résultat : coût HT matière / `poids_reel_kg` = coût HT par kg produit.
 | InputNumber responsive | `inputClass="sim-input"` + `:deep(.sim-input){width:100%;min-width:0}` + CSS grid `minmax(0,1fr)`. Pas de PrimeFlex grid pour les groupes de champs. |
 | Barre de recherche | Utiliser `IconField` + `InputIcon` — pas `p-input-icon-left` (rendu cassé). |
 | Suppression saveur | Soft-delete si lots rattachés (`actif=0`), suppression physique sinon. Flag `actif` non exposé dans l'UI. |
+| Suppression recette | Même règle : soft-delete si lots rattachés, suppression physique + cascade ingrédients + étapes sinon. |
+| `cruf_recette_ingredient.produit_id` | NOT NULL — un ingrédient doit toujours référencer un produit existant dans `rp_produit`. Libellé affiché via jointure `JOIN rp_produit p ON p.id = i.produit_id`. |
+| `cruf_recette_ingredient.type` | Géré par l'appli selon la zone de saisie UI (fruits vs additifs). Jamais exposé à l'utilisateur. |
+| Autocomplétion produits | `GET /peyrounet/api/inter/produits?q=xxx` via instance `axios` (baseURL `/monpanier/api`). Debounce 300ms par ingrédient. |
+| `produit_lib` dans Vue | Propriété réactive locale — ne pas confondre avec `libelle_canonique` retourné par l'API. Alimenté par `selectionnerProduit()`. |
 
 ---
 
@@ -304,7 +332,10 @@ RewriteRule ^crufiture/ /crufiture/index.html [L]
 - Widget visible dans `/ferme/dashboard`
 - `/dashboard/simulateur` → exemple betterave → résultats corrects
 - `/dashboard/saveurs` → liste + création + modification + suppression
+- `/dashboard/recettes` → liste groupée par saveur
+- `/dashboard/recettes/nouvelle` → création avec fruits + additifs + étapes
+- `/dashboard/recettes/:id` → édition + sauvegarde + duplication
 
 ---
 
-*Ferme du Peyrounet — Module /crufiture v2 — 31 mars 2026*
+*Ferme du Peyrounet — Module /crufiture v3 — 31 mars 2026*

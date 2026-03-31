@@ -39,6 +39,18 @@ const routes = [
                 component: () => import('@/views/admin/GestionSaveurs.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Saveurs' },
             },
+            {
+                path: 'recettes',
+                name: 'Recettes',
+                component: () => import('@/views/admin/GestionRecettes.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Recettes' },
+            },
+            {
+                path: 'recettes/:id',
+                name: 'EditionRecette',
+                component: () => import('@/views/admin/EditionRecette.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Édition recette' },
+            },
         ],
     },
     { path: '/unauthorized', name: 'Unauthorized', component: () => import('@/views/common/Error.vue') },

@@ -8,12 +8,12 @@
 - ✅ Corriger double flèche menu "Retour ferme"
 - ✅ Layout simulateur responsive (CSS grid natif + inputClass sim-input)
 - ✅ **Gestion des saveurs** — CRUD `cruf_saveur` + liste cards avec avatar + recherche live
+- 🔧 **Gestion des recettes** — code livré (RecetteController + GestionRecettes + EditionRecette), bugs en cours de correction en nouvelle discussion
 
 ---
 
 ## Fonctionnalités à développer (ordre suggéré)
 
-- [ ] **Gestion des recettes** — CRUD `cruf_recette` + `cruf_recette_ingredient` (instructions + ingrédients avec pct_base)
 - [ ] **Création d'un lot** — formulaire saisie + calculs Krencker en temps réel (réutiliser logique simulateur) + `cruf_lot_fruit`
 - [ ] **Suivi évaporation** — saisie mobile heure/poids/météo → `cruf_releve_evaporation`
 - [ ] **Mise en pot** — saisie poids réel + répartition en jarres → `cruf_jarre`

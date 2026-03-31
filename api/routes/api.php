@@ -8,6 +8,7 @@ require_once './controllers/PingController.php';
 require_once './controllers/FermeWidgetController.php';
 require_once './controllers/DashboardController.php';
 require_once './controllers/SaveurController.php';
+require_once './controllers/RecetteController.php';
 
 use helpers\ResponseHelper;
 
@@ -17,6 +18,7 @@ $pingCtrl      = new PingController();
 $widgetCtrl    = new FermeWidgetController($mysqli);
 $dashboardCtrl = new DashboardController($mysqli);
 $saveurCtrl    = new SaveurController($mysqli);
+$recetteCtrl   = new RecetteController($mysqli);
 
 $prefix = $_ENV['CRUFITURE_FOLDER'] ?? '/crufiture';
 $api    = $prefix . '/api';
@@ -39,6 +41,12 @@ switch ($method) {
         } elseif ($uri === $api . '/saveurs') {
             $saveurCtrl->getAll();
 
+        } elseif ($uri === $api . '/recettes') {
+            $recetteCtrl->getAll();
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)$#', $uri, $m)) {
+            $recetteCtrl->getOne($m[1]);
+
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
         }
@@ -49,6 +57,12 @@ switch ($method) {
 
         if ($uri === $api . '/saveurs') {
             $saveurCtrl->create($data);
+
+        } elseif ($uri === $api . '/recettes') {
+            $recetteCtrl->create($data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)/dupliquer$#', $uri, $m)) {
+            $recetteCtrl->dupliquer($m[1]);
 
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
@@ -61,6 +75,12 @@ switch ($method) {
         if (preg_match('#^' . preg_quote($api, '#') . '/saveurs/(\d+)$#', $uri, $m)) {
             $saveurCtrl->update($m[1], $data);
 
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)/complet$#', $uri, $m)) {
+            $recetteCtrl->updateComplet($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)$#', $uri, $m)) {
+            $recetteCtrl->update($m[1], $data);
+
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
         }
@@ -69,6 +89,9 @@ switch ($method) {
     case 'DELETE':
         if (preg_match('#^' . preg_quote($api, '#') . '/saveurs/(\d+)$#', $uri, $m)) {
             $saveurCtrl->delete($m[1]);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)$#', $uri, $m)) {
+            $recetteCtrl->delete($m[1]);
 
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);

@@ -1,8 +1,8 @@
 -- ============================================================
--- Module /crufiture — Schema SQL v1
+-- Module /crufiture — Schema SQL v1.2
 -- Base : u191509486_dbboutique (partagée Peyrounet)
 -- Préfixe : cruf_*
--- Généré le : 2026-03-30
+-- Généré le : 2026-03-30 — Mis à jour le : 2026-03-31
 -- ============================================================
 
 
@@ -37,6 +37,10 @@ CREATE TABLE cruf_saveur (
 -- Les additifs (fleurs, épices, jus citron...) ont un pct_base.
 -- Fructose et saccharose sont implicites (calculés par formulation).
 --
+-- Plusieurs versions peuvent coexister pour une même saveur —
+-- le choix de la version est fait au moment de la création du lot.
+-- Les anciennes versions sont conservées pour la traçabilité.
+--
 -- Usage prix de revient :
 --   qté réelle = base_kg × (pct_base / 100) pour les additifs
 --   qté fruit  = base_kg (c'est la base elle-même)
@@ -47,7 +51,7 @@ CREATE TABLE cruf_recette (
     saveur_id       INT UNSIGNED     NOT NULL,
     version         TINYINT UNSIGNED NOT NULL DEFAULT 1,
     titre           VARCHAR(200)     NOT NULL,
-    instructions    TEXT             NOT NULL,   -- étapes texte libre
+    instructions    TEXT             NOT NULL,   -- étapes texte libre (conservé, remplacé par cruf_recette_etape)
     note            TEXT             DEFAULT NULL,
     actif           TINYINT(1)       NOT NULL DEFAULT 1,
     created_at      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -60,22 +64,42 @@ CREATE TABLE cruf_recette (
 -- 3. INGRÉDIENTS DE RECETTE
 -- Tous les ingrédients d'une recette avec leur proportion.
 --
--- pct_base NULL  → fruit principal (= la base, pivot des calculs)
---                  qté réelle sur lot = base_kg
--- pct_base > 0   → additif (fleurs, épices, jus citron...)
---                  qté réelle sur lot = base_kg × (pct_base / 100)
+-- type = 'pivot'  → fruit de référence, un seul par recette
+--                   pct_base NULL
+--                   les proportions des autres fruits sont
+--                   exprimées en % de ce fruit
+--                   qté réelle sur lot = base_kg du pivot
 --
--- produit_id → FK vers rp_produit dans /peyrounet
---              pour le calcul du prix de revient matière.
---              Nullable si le produit n'est pas encore référencé.
+-- type = 'fruit'  → autre fruit de la mixture
+--                   pct_base = % du fruit pivot
+--                   qté réelle sur lot = base_kg_pivot × (pct_base / 100)
+--
+-- type = 'additif'→ ingrédient supplémentaire (fleurs, épices, jus...)
+--                   pct_base = % de la base totale (mixture fruits)
+--                   qté réelle sur lot = base_kg_total × (pct_base / 100)
+--
+-- Le type est géré par l'application selon la zone de saisie UI,
+-- jamais exposé directement à l'utilisateur.
+--
+-- produit_id → FK vers rp_produit dans /peyrounet (NOT NULL)
+--              Le libellé affiché est rp_produit.libelle_canonique
+--              obtenu par jointure — pas de copie locale.
+--              Un ingrédient doit toujours référencer un produit
+--              existant dans rp_produit.
+--
+-- pct_base → NULL pour le pivot
+--             % du pivot pour les autres fruits
+--             % de la base totale pour les additifs
+--             L'unité d'affichage des poids calculés (kg ou g)
+--             est déterminée à la volée selon la valeur,
+--             comme dans le simulateur de formulation.
 -- ------------------------------------------------------------
 CREATE TABLE cruf_recette_ingredient (
     id              INT UNSIGNED     AUTO_INCREMENT PRIMARY KEY,
     recette_id      INT UNSIGNED     NOT NULL,
-    libelle         VARCHAR(100)     NOT NULL,        -- ex: Rhubarbe, Fleurs de sureau, Jus de citron
-    produit_id      INT UNSIGNED     DEFAULT NULL,    -- FK peyrounet rp_produit (nullable)
-    pct_base        DECIMAL(6,3)     DEFAULT NULL,    -- NULL = fruit principal ; sinon % de base_kg
-    unite           VARCHAR(20)      NOT NULL,        -- kg, g, L, cl, pièce...
+    produit_id      INT UNSIGNED     NOT NULL,        -- FK peyrounet rp_produit
+    type            ENUM('pivot','fruit','additif') NOT NULL DEFAULT 'additif',
+    pct_base        DECIMAL(6,3)     DEFAULT NULL,    -- NULL = pivot ; % du pivot si fruit ; % base totale si additif
     note            VARCHAR(255)     DEFAULT NULL,
     ordre           TINYINT UNSIGNED NOT NULL DEFAULT 0,
     FOREIGN KEY (recette_id) REFERENCES cruf_recette(id)
@@ -83,7 +107,25 @@ CREATE TABLE cruf_recette_ingredient (
 
 
 -- ------------------------------------------------------------
--- 4. LOTS DE PRODUCTION
+-- 4. ÉTAPES DE RECETTE
+-- Instructions détaillées, ordonnées et réordonnables.
+-- Remplace le champ `instructions` TEXT de cruf_recette
+-- pour permettre l'édition par étape, le drag-and-drop,
+-- et la duplication fine lors de la création d'une v2.
+-- cruf_recette.instructions est conservé (non supprimé).
+-- ------------------------------------------------------------
+CREATE TABLE cruf_recette_etape (
+    id              INT UNSIGNED     AUTO_INCREMENT PRIMARY KEY,
+    recette_id      INT UNSIGNED     NOT NULL,
+    ordre           TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    contenu         TEXT             NOT NULL,
+    created_at      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recette_id) REFERENCES cruf_recette(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- ------------------------------------------------------------
+-- 5. LOTS DE PRODUCTION
 -- Cœur du module. Un lot = une session de production complète.
 --
 -- Numéro de lot : YY + séquentiel 4 chiffres, généré par l'appli
@@ -147,7 +189,7 @@ CREATE TABLE cruf_lot (
 
 
 -- ------------------------------------------------------------
--- 5. FRUITS D'UN LOT
+-- 6. FRUITS D'UN LOT
 -- Détail des fruits/légumes/fleurs utilisés dans ce lot.
 -- Traçabilité et étiquetage multi-fruits.
 -- Le brix est mesuré sur le mélange global (dans cruf_lot),
@@ -167,7 +209,7 @@ CREATE TABLE cruf_lot_fruit (
 
 
 -- ------------------------------------------------------------
--- 6. STOCKAGE EN JARRES
+-- 7. STOCKAGE EN JARRES
 -- Un lot est stocké dans 1 à 3 jarres maximum.
 -- Chaque jarre a son poids de crufiture.
 -- Permet le suivi des sorties par jarre (vente vrac, mise en pot).
@@ -187,7 +229,7 @@ CREATE TABLE cruf_jarre (
 
 
 -- ------------------------------------------------------------
--- 7. RELEVÉS D'ÉVAPORATION
+-- 8. RELEVÉS D'ÉVAPORATION
 -- Suivi en temps réel pendant la production.
 -- Heure / poids plateau / reste à évaporer / météo.
 -- Permet de suivre la progression vers la cible.
@@ -207,7 +249,7 @@ CREATE TABLE cruf_releve_evaporation (
 
 
 -- ------------------------------------------------------------
--- 8. CONTRÔLES QUALITÉ
+-- 9. CONTRÔLES QUALITÉ
 -- Plusieurs contrôles possibles par lot dans le temps.
 -- Le premier est effectué à la mise en pot (brix atteint ?).
 -- Les suivants sont libres (J+7, J+30, par envie...).
@@ -234,7 +276,13 @@ CREATE TABLE cruf_controle (
 --
 --  cruf_saveur (1)
 --    └── cruf_recette (N)          une saveur peut avoir plusieurs versions de recette
---          └── cruf_recette_ingredient (N)  ingrédients avec % de base (NULL = fruit pivot)
+--          ├── cruf_recette_ingredient (N)  ingrédients avec type et proportion
+--          │     produit_id → rp_produit (peyrounet) NOT NULL
+--          │     pivot  → fruit de référence (pct_base NULL)
+--          │     fruit  → autre fruit, pct_base = % du pivot
+--          │     additif→ ingrédient supp., pct_base = % de la base totale
+--          │     libellé affiché = rp_produit.libelle_canonique (jointure)
+--          └── cruf_recette_etape (N)       étapes ordonnées (remplace instructions TEXT)
 --
 --  cruf_lot (N) ──────────────────→ cruf_saveur (1)
 --  cruf_lot (N) ──────────────────→ cruf_recette (1)  (nullable)
@@ -268,5 +316,21 @@ CREATE TABLE cruf_controle (
 --    - Additifs  : base_kg × (pct_base / 100) pour chaque cruf_recette_ingredient
 --    → total HT matière / poids_reel_kg = coût HT / kg produit
 --    → + emballage selon conditionnement (vrac, pot 100g, pot 300g)
+--
+-- ============================================================
+-- HISTORIQUE DES MODIFICATIONS
+-- ============================================================
+--
+-- v1.1 (2026-03-31) :
+--   cruf_recette_ingredient :
+--     + type  ENUM('pivot','fruit','additif') NOT NULL DEFAULT 'additif'
+--     ~ unite VARCHAR(20) → ENUM('kg','g') NOT NULL DEFAULT 'kg'
+--   cruf_recette_etape : nouvelle table (étapes ordonnées)
+--
+-- v1.2 (2026-03-31) :
+--   cruf_recette_ingredient :
+--     - libelle  supprimé → rp_produit.libelle_canonique par jointure
+--     - unite    supprimé → affichage kg/g déterminé à la volée selon valeur
+--     ~ produit_id DEFAULT NULL → NOT NULL
 --
 -- ============================================================
