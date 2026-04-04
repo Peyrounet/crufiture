@@ -9,6 +9,7 @@ require_once './controllers/FermeWidgetController.php';
 require_once './controllers/DashboardController.php';
 require_once './controllers/SaveurController.php';
 require_once './controllers/RecetteController.php';
+require_once './controllers/LotController.php';
 
 use helpers\ResponseHelper;
 
@@ -19,6 +20,7 @@ $widgetCtrl    = new FermeWidgetController($mysqli);
 $dashboardCtrl = new DashboardController($mysqli);
 $saveurCtrl    = new SaveurController($mysqli);
 $recetteCtrl   = new RecetteController($mysqli);
+$lotCtrl       = new LotController($mysqli);
 
 $prefix = $_ENV['CRUFITURE_FOLDER'] ?? '/crufiture';
 $api    = $prefix . '/api';
@@ -47,6 +49,19 @@ switch ($method) {
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)$#', $uri, $m)) {
             $recetteCtrl->getOne($m[1]);
 
+        } elseif ($uri === $api . '/lots/suivi') {
+            // Lots en_repos et production — menu suivi + PWA mobile
+            $lotCtrl->getSuivi();
+
+        } elseif ($uri === $api . '/lots') {
+            $lotCtrl->getAll();
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/rendements$#', $uri, $m)) {
+            $lotCtrl->getRendements($m[1]);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)$#', $uri, $m)) {
+            $lotCtrl->getOne($m[1]);
+
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
         }
@@ -64,6 +79,15 @@ switch ($method) {
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)/dupliquer$#', $uri, $m)) {
             $recetteCtrl->dupliquer($m[1]);
 
+        } elseif ($uri === $api . '/lots') {
+            $lotCtrl->create($data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/releves$#', $uri, $m)) {
+            $lotCtrl->addReleve($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/controles$#', $uri, $m)) {
+            $lotCtrl->addControle($m[1], $data);
+
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
         }
@@ -80,6 +104,21 @@ switch ($method) {
 
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)$#', $uri, $m)) {
             $recetteCtrl->update($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/mettre-en-repos$#', $uri, $m)) {
+            $lotCtrl->mettreEnRepos($m[1]);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/demarrer$#', $uri, $m)) {
+            $lotCtrl->demarrer($m[1]);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/stocker$#', $uri, $m)) {
+            $lotCtrl->stocker($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/abandonner$#', $uri, $m)) {
+            $lotCtrl->abandonner($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)$#', $uri, $m)) {
+            $lotCtrl->update($m[1], $data);
 
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);

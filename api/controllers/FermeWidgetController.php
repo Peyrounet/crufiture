@@ -22,72 +22,87 @@ class FermeWidgetController
         $kpis             = [];
         $actions_urgentes = [];
 
-        // ── KPI 1 : nombre de lots cette année ────────────────────
-        $annee = date('Y');
-        $r = $this->mysqli->query(
+        // ── KPI 1 : nombre de lots cette année (hors abandonné) ──
+        $annee = (int) date('Y');
+        $stmt  = $this->mysqli->prepare(
             "SELECT COUNT(*) AS nb FROM cruf_lot
-             WHERE YEAR(date_production) = $annee
-               AND statut != 'archive'"
+             WHERE YEAR(date_production) = ?
+               AND statut != 'abandonné'"
         );
-        if ($r) {
-            $row = $r->fetch_assoc();
+        $stmt->bind_param('i', $annee);
+        $stmt->execute();
+        $row   = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        $kpis[] = [
+            'label'   => 'Lots ' . $annee,
+            'valeur'  => (int) $row['nb'],
+            'unite'   => null,
+            'couleur' => 'neutral',
+        ];
+
+        // ── KPI 2 : lots en production ────────────────────────────
+        $r2   = $this->mysqli->query("SELECT COUNT(*) AS nb FROM cruf_lot WHERE statut = 'production'");
+        $row2 = $r2->fetch_assoc();
+        $nb_prod = (int) $row2['nb'];
+        $kpis[] = [
+            'label'   => 'En production',
+            'valeur'  => $nb_prod,
+            'unite'   => null,
+            'couleur' => $nb_prod > 0 ? 'orange' : 'neutral',
+        ];
+
+        // ── KPI 3 : lots en repos ─────────────────────────────────
+        $r3   = $this->mysqli->query("SELECT COUNT(*) AS nb FROM cruf_lot WHERE statut = 'en_repos'");
+        $row3 = $r3->fetch_assoc();
+        $nb_repos = (int) $row3['nb'];
+        if ($nb_repos > 0) {
             $kpis[] = [
-                'label'   => 'Lots ' . $annee,
-                'valeur'  => (int) $row['nb'],
+                'label'   => 'En repos',
+                'valeur'  => $nb_repos,
                 'unite'   => null,
                 'couleur' => 'neutral',
             ];
         }
 
-        // ── KPI 2 : lots en cours de production ───────────────────
-        $r2 = $this->mysqli->query(
-            "SELECT COUNT(*) AS nb FROM cruf_lot
-             WHERE statut = 'en_production'"
-        );
-        if ($r2) {
-            $row2  = $r2->fetch_assoc();
-            $nb_en = (int) $row2['nb'];
-            $kpis[] = [
-                'label'   => 'En production',
-                'valeur'  => $nb_en,
-                'unite'   => null,
-                'couleur' => $nb_en > 0 ? 'orange' : 'neutral',
-            ];
-        }
-
-        // ── KPI 3 : stock total en jarres (kg) ────────────────────
-        $r3 = $this->mysqli->query(
+        // ── KPI 4 : stock total en jarres (kg) ────────────────────
+        $r4   = $this->mysqli->query(
             "SELECT ROUND(SUM(poids_actuel_kg), 2) AS stock
-             FROM cruf_jarre
-             WHERE poids_actuel_kg > 0"
+             FROM cruf_jarre WHERE poids_actuel_kg > 0"
         );
-        if ($r3) {
-            $row3 = $r3->fetch_assoc();
-            $stock = $row3['stock'] !== null ? (float) $row3['stock'] : 0;
-            $kpis[] = [
-                'label'   => 'Stock en jarres',
-                'valeur'  => $stock,
-                'unite'   => 'kg',
-                'couleur' => $stock < 2 ? 'orange' : 'green',
-            ];
-        }
+        $row4  = $r4->fetch_assoc();
+        $stock = $row4['stock'] !== null ? (float) $row4['stock'] : 0;
+        $kpis[] = [
+            'label'   => 'Stock en jarres',
+            'valeur'  => $stock,
+            'unite'   => 'kg',
+            'couleur' => $stock < 2 ? 'orange' : 'green',
+        ];
 
-        // ── Actions urgentes : lots en_production sans relevé récent
-        $hier = date('Y-m-d', strtotime('-1 day'));
-        $r4 = $this->mysqli->query(
-            "SELECT COUNT(*) AS nb FROM cruf_lot
-             WHERE statut = 'en_production'
-               AND date_production < '$hier'"
+        // ── Action urgente : lots en production sans relevé depuis hier
+        $hier  = date('Y-m-d', strtotime('-1 day'));
+        $stmt5 = $this->mysqli->prepare(
+            "SELECT l.id FROM cruf_lot l
+             WHERE l.statut = 'production'
+               AND (
+                 SELECT MAX(rv.created_at) FROM cruf_releve_evaporation rv WHERE rv.lot_id = l.id
+               ) < ?
+                OR NOT EXISTS (
+                 SELECT 1 FROM cruf_releve_evaporation rv WHERE rv.lot_id = l.id
+               )"
         );
-        if ($r4) {
-            $row4 = $r4->fetch_assoc();
-            if ((int) $row4['nb'] > 0) {
-                $actions_urgentes[] = [
-                    'label'    => (int) $row4['nb'] . ' lot(s) en production depuis hier ou avant',
-                    'severite' => 'warning',
-                    'lien'     => '/crufiture/dashboard/lots',
-                ];
-            }
+        $hier_dt = $hier . ' 00:00:00';
+        $stmt5->bind_param('s', $hier_dt);
+        $stmt5->execute();
+        $r5    = $stmt5->get_result();
+        $nb_sans_releve = $r5->num_rows;
+        $stmt5->close();
+
+        if ($nb_sans_releve > 0) {
+            $actions_urgentes[] = [
+                'label'    => $nb_sans_releve . ' lot(s) en production sans relevé depuis hier',
+                'severite' => 'warning',
+                'lien'     => '/crufiture/dashboard/lots',
+            ];
         }
 
         echo ResponseHelper::jsonResponse('OK', 'success', [
