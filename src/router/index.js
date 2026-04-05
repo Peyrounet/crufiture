@@ -16,6 +16,8 @@ const routes = [
         component: () => import('@/views/LoginView.vue'),
         meta: { requiresGuest: true },
     },
+
+    // ── Dashboard bureau — AppLayout ───────────────────────────
     {
         path: '/dashboard',
         component: () => import('@/layout/AppLayout.vue'),
@@ -71,6 +73,47 @@ const routes = [
             },
         ],
     },
+
+    // ── PWA Production mobile — ProductionLayout ───────────────
+    // Accessible aux admin, organizer et producer
+    {
+        path: '/production',
+        component: () => import('@/layout/ProductionLayout.vue'),
+        meta: { requiresAuth: true },
+        children: [
+            {
+                path: '',
+                name: 'ProductionAccueil',
+                component: () => import('@/views/production/ProductionAccueil.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer', 'producer'], title: 'Suivi de production' },
+            },
+            {
+                path: 'lot/:id/demarrer',
+                name: 'ProductionDemarrage',
+                component: () => import('@/views/production/ProductionDemarrage.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer', 'producer'], title: 'Démarrer le lot' },
+            },
+            {
+                path: 'lot/:id',
+                name: 'ProductionPesee',
+                component: () => import('@/views/production/ProductionPesee.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer', 'producer'], title: 'Relevé de pesée' },
+            },
+            {
+                path: 'lot/:id/historique',
+                name: 'ProductionHistorique',
+                component: () => import('@/views/production/ProductionHistorique.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer', 'producer'], title: 'Historique des pesées' },
+            },
+            {
+                path: 'lot/:id/stocker',
+                name: 'ProductionStock',
+                component: () => import('@/views/production/ProductionStock.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer', 'producer'], title: 'Mise en stock' },
+            },
+        ],
+    },
+
     { path: '/unauthorized', name: 'Unauthorized', component: () => import('@/views/common/Error.vue') },
     { path: '/:pathMatch(.*)*',  name: 'NotFound',    component: () => import('@/views/common/Error.vue') },
 ];
