@@ -160,7 +160,7 @@ const demarrer = async () => {
             <div class="dem-bloc-titre">Démarrage</div>
 
             <div class="dem-field">
-                <label>Heure de pose <span class="dem-req">*</span></label>
+                <label>Heure de mise en place <span class="dem-req">*</span></label>
                 <input type="time" v-model="form.heure_debut" class="dem-input" />
             </div>
 

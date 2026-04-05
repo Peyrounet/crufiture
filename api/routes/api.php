@@ -109,7 +109,7 @@ switch ($method) {
             $lotCtrl->mettreEnRepos($m[1]);
 
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/demarrer$#', $uri, $m)) {
-            $lotCtrl->demarrer($m[1]);
+            $lotCtrl->demarrer($m[1], $data);
 
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/stocker$#', $uri, $m)) {
             $lotCtrl->stocker($m[1], $data);

@@ -660,38 +660,23 @@ class LotController
             return;
         }
 
-        // heure_debut : fournie par la PWA ou heure courante
-        $heure_debut  = isset($data['heure_debut'])  && $data['heure_debut']  !== '' ? $data['heure_debut']  : date('H:i:s');
-        // installation : peut être mise à jour depuis la PWA (confirmation terrain)
+        if (!isset($data['tare_kg']) || $data['tare_kg'] === '') {
+            echo ResponseHelper::jsonResponse('La tare plaque est obligatoire pour démarrer la production.', 'error', null, 422);
+            return;
+        }
+
+        // datetime_debut : date du jour + heure fournie par la PWA
+        $heure        = isset($data['heure_debut']) && $data['heure_debut'] !== '' ? $data['heure_debut'] : date('H:i:s');
+        $datetime_debut = date('Y-m-d') . ' ' . $heure;
         $installation = isset($data['installation']) && $data['installation'] !== '' ? $data['installation'] : null;
-        // tare_kg : poids à vide du matériel, saisi au démarrage
-        $tare_kg      = isset($data['tare_kg'])      && $data['tare_kg']      !== '' ? (float) $data['tare_kg'] : null;
+        $tare_kg      = (float) $data['tare_kg'];
 
-        // Construire la mise à jour dynamiquement selon les champs fournis
-        $sets   = ["statut = 'production'", "heure_debut = ?"];
-        $params = 's';
-        $vals   = [&$heure_debut];
-
-        if ($installation !== null) {
-            $sets[]  = 'installation = ?';
-            $params .= 's';
-            $vals[]  = &$installation;
-        }
-
-        if ($tare_kg !== null) {
-            $sets[]  = 'tare_kg = ?';
-            $params .= 'd';
-            $vals[]  = &$tare_kg;
-        }
-
-        $params .= 'i';
-        $vals[]  = &$id;
-
-        $sql  = "UPDATE cruf_lot SET " . implode(', ', $sets) . " WHERE id = ?";
-        $stmt2 = $this->mysqli->prepare($sql);
-        $ref   = [&$params];
-        foreach ($vals as &$v) { $ref[] = &$v; }
-        call_user_func_array([$stmt2, 'bind_param'], $ref);
+        $stmt2 = $this->mysqli->prepare(
+            "UPDATE cruf_lot
+             SET statut = 'production', datetime_debut = ?, installation = ?, tare_kg = ?
+             WHERE id = ?"
+        );
+        $stmt2->bind_param('ssdi', $datetime_debut, $installation, $tare_kg, $id);
         $stmt2->execute();
         $stmt2->close();
 
