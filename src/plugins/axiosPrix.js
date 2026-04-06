@@ -1,15 +1,15 @@
 /**
- * axiosPeyrounet.js — Client HTTP pour l'API /peyrounet (services transverses)
+ * axiosPrix.js — Client HTTP pour l'API /prix (services transverses)
  * Distinct de axios.js qui pointe vers /monpanier/api.
  */
 import axios from 'axios';
 
-const axiosPeyrounet = axios.create({
-    baseURL: import.meta.env.VITE_PEYROUNET_API_URL ?? '/peyrounet/api',
+const axiosPrix = axios.create({
+    baseURL: import.meta.env.VITE_PRIX_API_URL ?? '/prix/api',
     withCredentials: true,
 });
 
-axiosPeyrounet.interceptors.response.use(
+axiosPrix.interceptors.response.use(
     (response) => response,
     (error) => {
         const status = error.response?.status;
@@ -20,4 +20,4 @@ axiosPeyrounet.interceptors.response.use(
     }
 );
 
-export default axiosPeyrounet;
+export default axiosPrix;

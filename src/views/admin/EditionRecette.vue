@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import axiosCrufiture from '@/plugins/axiosCrufiture';
 import axios from '@/plugins/axios';
-import axiosPeyrounet from '@/plugins/axiosPeyrounet';
+import axiosPrix from '@/plugins/axiosPrix';
 import draggable from 'vuedraggable';
 
 const route  = useRoute();
@@ -120,7 +120,7 @@ async function rechercherProduit(ing, q) {
     _debounce[ing._key] = setTimeout(async () => {
         ing._searching = true;
         try {
-            const res = await axiosPeyrounet.get('/inter/produits', { params: { q } });
+            const res = await axiosPrix.get('/inter/articles', { params: { q } });
             ing._suggestions = res.data?.details ?? [];
         } catch {
             ing._suggestions = [];
@@ -405,7 +405,7 @@ function retourListe() {
                             <div class="ed-fruit-fields">
                                 <!-- Ligne 1 : produit + % -->
                                 <div class="ed-fruit-row1">
-                                    <!-- Lien produit peyrounet -->
+                                    <!-- Lien article /prix -->
                                     <div class="ed-field-inline ed-produit-field" style="flex:1">
                                         <div v-if="fruit.produit_id" class="ed-produit-tag">
                                             <i class="pi pi-link" style="font-size:11px" />
@@ -519,7 +519,7 @@ function retourListe() {
                                 <div v-else class="ed-produit-search">
                                     <input
                                         type="text"
-                                        placeholder="Chercher dans peyrounet…"
+                                        placeholder="Chercher dans /prix…"
                                         class="p-inputtext p-component w-full"
                                         @input="rechercherProduit(additifs[idx], $event.target.value)"
                                     />
@@ -804,7 +804,7 @@ function retourListe() {
     text-overflow: ellipsis;
 }
 
-/* ── Produit peyrounet ───────────────────────────────────────── */
+/* ── Article /prix ───────────────────────────────────────── */
 .ed-produit-field {
     position: relative;
 }
