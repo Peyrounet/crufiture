@@ -1,9 +1,9 @@
 -- ============================================================
--- Module /crufiture — Schema SQL v4
+-- Module /crufiture — Schema SQL
 -- Base : u191509486_dbboutique (partagée Peyrounet)
 -- Préfixe : cruf_*
 -- Généré le : 2026-03-30
--- Mis à jour le : 2026-04-05 (v5 — datetime_debut)
+-- Mis à jour le : 2026-04-07 (v5 — intégration /stock)
 -- ============================================================
 
 
@@ -14,16 +14,47 @@
 -- de création de lot — modifiables lot par lot.
 -- ------------------------------------------------------------
 CREATE TABLE cruf_saveur (
-    id              INT UNSIGNED     AUTO_INCREMENT PRIMARY KEY,
-    nom             VARCHAR(100)     NOT NULL,             -- ex: Betterave, Rhubarbe Fleur de Sureau
-    slug            VARCHAR(100)     NOT NULL UNIQUE,      -- ex: betterave, rhubarbe-fleur-sureau
-    brix_cible      DECIMAL(5,2)     NOT NULL DEFAULT 70.00,
-    pa_cible        DECIMAL(5,2)     NOT NULL DEFAULT 68.00,   -- g pulpe / 100g (mention étiquette légale)
-    pct_fructose    DECIMAL(5,2)     NOT NULL DEFAULT 50.00,   -- % fructose dans sucre ajouté
-    note            TEXT             DEFAULT NULL,
-    actif           TINYINT(1)       NOT NULL DEFAULT 1,
-    created_at      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    id               INT UNSIGNED     AUTO_INCREMENT PRIMARY KEY,
+    nom              VARCHAR(100)     NOT NULL,             -- ex: Betterave, Rhubarbe Fleur de Sureau
+    slug             VARCHAR(100)     NOT NULL UNIQUE,      -- ex: betterave, rhubarbe-fleur-sureau
+    brix_cible       DECIMAL(5,2)     NOT NULL DEFAULT 70.00,
+    pa_cible         DECIMAL(5,2)     NOT NULL DEFAULT 68.00,   -- g pulpe / 100g (mention étiquette légale)
+    pct_fructose     DECIMAL(5,2)     NOT NULL DEFAULT 50.00,   -- % fructose dans sucre ajouté
+    note             TEXT             DEFAULT NULL,
+    stock_article_id INT UNSIGNED     DEFAULT NULL,         -- FK logique vers stock_article (pas de contrainte — cross-service)
+                                                            -- renseigné dans la fiche saveur via autocomplétion /stock
+                                                            -- utilisé pour déclarer entree_production à la mise en stock du lot
+    actif            TINYINT(1)       NOT NULL DEFAULT 1,
+    created_at       DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
+-- ------------------------------------------------------------
+-- 1b. MÉMOIRE LOCALE — LIAISON INGRÉDIENTS → /stock
+-- Table de correspondance entre les produits utilisés en recette
+-- (produit_id dans prix_article / rp_produit) et les articles
+-- gérés dans le service /stock (stock_article).
+--
+-- La liaison est OPTIONNELLE — seuls les ingrédients gérés en
+-- stock y figurent. Les ingrédients absents (ex: fleurs de sureau)
+-- sont ignorés silencieusement lors des déclarations de consommation.
+--
+-- Clé : produit_id (cross-recettes) — si un même produit est utilisé
+-- dans plusieurs recettes, la liaison s'applique à toutes et le champ
+-- est prérempli automatiquement à l'ouverture de la recette.
+--
+-- Pas de FK contrainte sur stock_article_id — cross-service.
+-- ------------------------------------------------------------
+CREATE TABLE cruf_stock_memoire_ingredient (
+    id               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    produit_id       INT UNSIGNED NOT NULL COMMENT 'ID dans rp_produit / prix_article (/prix)',
+    stock_article_id INT UNSIGNED NOT NULL COMMENT 'ID dans stock_article (/stock)',
+    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_produit (produit_id)    -- un produit = un seul article stock mémorisé
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
@@ -429,6 +460,16 @@ CREATE TABLE cruf_controle (
 --     + poids_pleine_kg DECIMAL(6,3) — poids jarre remplie
 --     ~ poids_initial_kg : désormais calculé = poids_pleine_kg - tare_kg
 --     ~ numero : sans limite applicative (en pratique 1 à 3)
+--
+-- v5.0 (2026-04-07) — intégration /stock :
+--   cruf_saveur :
+--     + stock_article_id INT UNSIGNED DEFAULT NULL
+--       FK logique (sans contrainte) vers stock_article dans /stock
+--       Renseigné dans la fiche saveur — utilisé pour entree_production
+--   cruf_stock_memoire_ingredient : nouvelle table
+--     Correspondance produit_id (rp_produit) → stock_article_id (/stock)
+--     Liaison optionnelle par ingrédient — clé unique sur produit_id
+--     Préremplissage automatique cross-recettes
 --
 -- v4.0 (2026-04-05) — datetime_debut :
 --   cruf_lot :
