@@ -126,6 +126,7 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore();
     const userStore = useUserStore();
+    const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
 
     if (to.meta.requiresAuth && !userStore.user) {
         await authStore.authenticate();
@@ -146,7 +147,26 @@ router.beforeEach(async (to, from, next) => {
 
     if (to.meta.title) document.title = to.meta.title + ' — Crufiture';
 
-    next();
+    if (authStore.token && to.path === '/login') {
+        return next('/dashboard');
+    }
+
+    if (requiresAuth) {
+        try {
+            await authStore.authenticate();
+            if (to.meta.roles && !to.meta.roles.some((role) => userStore.userRoles.includes(role))) {
+                return next('/login');
+            }
+            return next();
+        } catch (error) {
+            return next('/login');
+        }
+    } else {
+        if (!requiresAuth && to.path === '/') {
+            return authStore.token ? next('/dashboard') : next('/login');
+        }
+        return next();
+    }
 });
 
 export default router;
