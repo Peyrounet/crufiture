@@ -76,12 +76,14 @@ class RecetteController
         $recette['version']   = (int) $recette['version'];
         $recette['actif']     = (int) $recette['actif'];
 
-        // Ingrédients (ordonnés) — libellé depuis rp_produit par jointure
+        // Ingrédients (ordonnés) — libellé depuis rp_produit + lien stock mémorisé
         $stmt2 = $this->mysqli->prepare(
             "SELECT i.id, i.produit_id, p.libelle_canonique, p.categorie,
-                    i.type, i.pct_base, i.note, i.ordre
+                    i.type, i.pct_base, i.note, i.ordre,
+                    sm.stock_article_id
              FROM cruf_recette_ingredient i
              JOIN rp_produit p ON p.id = i.produit_id
+             LEFT JOIN cruf_stock_memoire_ingredient sm ON sm.produit_id = i.produit_id
              WHERE i.recette_id = ?
              ORDER BY i.ordre ASC, i.id ASC"
         );
@@ -90,10 +92,11 @@ class RecetteController
         $res2 = $stmt2->get_result();
         $ingredients = [];
         while ($row = $res2->fetch_assoc()) {
-            $row['id']         = (int)   $row['id'];
-            $row['produit_id'] = (int)   $row['produit_id'];
-            $row['pct_base']   = $row['pct_base'] !== null ? (float) $row['pct_base'] : null;
-            $row['ordre']      = (int)   $row['ordre'];
+            $row['id']               = (int)   $row['id'];
+            $row['produit_id']       = (int)   $row['produit_id'];
+            $row['pct_base']         = $row['pct_base'] !== null ? (float) $row['pct_base'] : null;
+            $row['ordre']            = (int)   $row['ordre'];
+            $row['stock_article_id'] = $row['stock_article_id'] !== null ? (int) $row['stock_article_id'] : null;
             $ingredients[] = $row;
         }
         $stmt2->close();
@@ -410,12 +413,14 @@ class RecetteController
         );
 
         foreach ($ingredients as $idx => $ing) {
-            $produit_id = (int) ($ing['produit_id'] ?? 0);
-            $type       = $ing['type']  ?? 'additif';
-            $pct_base   = (isset($ing['pct_base']) && $ing['pct_base'] !== null)
-                          ? (float) $ing['pct_base'] : null;
-            $note       = (isset($ing['note']) && $ing['note'] !== '') ? $ing['note'] : null;
-            $ordre      = (int) $idx;
+            $produit_id       = (int) ($ing['produit_id'] ?? 0);
+            $type             = $ing['type']  ?? 'additif';
+            $pct_base         = (isset($ing['pct_base']) && $ing['pct_base'] !== null)
+                                ? (float) $ing['pct_base'] : null;
+            $note             = (isset($ing['note']) && $ing['note'] !== '') ? $ing['note'] : null;
+            $ordre            = (int) $idx;
+            $stock_article_id = (isset($ing['stock_article_id']) && $ing['stock_article_id'] !== null)
+                                ? (int) $ing['stock_article_id'] : null;
 
             if ($produit_id === 0) continue;
 
@@ -428,6 +433,19 @@ class RecetteController
                 $pct_base_bind, $note, $ordre
             );
             $stmt->execute();
+
+            // Mémoriser la liaison produit → stock si fournie
+            if ($stock_article_id !== null) {
+                $stmtMem = $this->mysqli->prepare(
+                    "INSERT INTO cruf_stock_memoire_ingredient (produit_id, stock_article_id)
+                     VALUES (?, ?)
+                     ON DUPLICATE KEY UPDATE stock_article_id = VALUES(stock_article_id),
+                                             updated_at = CURRENT_TIMESTAMP"
+                );
+                $stmtMem->bind_param('ii', $produit_id, $stock_article_id);
+                $stmtMem->execute();
+                $stmtMem->close();
+            }
         }
 
         $stmt->close();

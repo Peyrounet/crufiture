@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import axiosCrufiture from '@/plugins/axiosCrufiture';
+import axiosStock from '@/plugins/axiosStock';
 
 const toast = useToast();
 
@@ -43,13 +44,52 @@ const saving        = ref(false);
 const idEnEdition   = ref(null);
 
 const formVide = () => ({
-    nom:          '',
-    slug:         '',
-    brix_cible:   70,
-    pa_cible:     68,
-    pct_fructose: 50,
-    note:         '',
+    nom:              '',
+    slug:             '',
+    brix_cible:       70,
+    pa_cible:         68,
+    pct_fructose:     50,
+    note:             '',
+    stock_article_id: null,
+    stock_article_libelle: '', // affiché dans l'input de recherche
 });
+
+// ── Autocomplétion article stock ──────────────────────────────
+const stockRecherche    = ref('');
+const stockResultats    = ref([]);
+const stockChargement   = ref(false);
+let   stockDebounce     = null;
+
+function onStockInput() {
+    clearTimeout(stockDebounce);
+    const q = stockRecherche.value.trim();
+    if (q.length < 2) { stockResultats.value = []; return; }
+    stockDebounce = setTimeout(() => rechercherStock(q), 300);
+}
+
+async function rechercherStock(q) {
+    stockChargement.value = true;
+    try {
+        const res = await axiosStock.get('/articles', { params: { q } });
+        stockResultats.value = Array.isArray(res.data) ? res.data : [];
+    } catch {
+        stockResultats.value = [];
+    } finally {
+        stockChargement.value = false;
+    }
+}
+
+function selectionnerArticle(article) {
+    form.stock_article_id      = article.id;
+    form.stock_article_libelle = article.libelle;
+    stockRecherche.value       = '';
+    stockResultats.value       = [];
+}
+
+function supprimerLiaisonStock() {
+    form.stock_article_id      = null;
+    form.stock_article_libelle = '';
+}
 
 const form = reactive(formVide());
 
@@ -95,14 +135,18 @@ function ouvrirEdition(saveur) {
     modeEdition.value   = true;
     idEnEdition.value   = saveur.id;
     Object.assign(form, {
-        nom:          saveur.nom,
-        slug:         saveur.slug,
-        brix_cible:   saveur.brix_cible,
-        pa_cible:     saveur.pa_cible,
-        pct_fructose: saveur.pct_fructose,
-        note:         saveur.note ?? '',
+        nom:                   saveur.nom,
+        slug:                  saveur.slug,
+        brix_cible:            saveur.brix_cible,
+        pa_cible:              saveur.pa_cible,
+        pct_fructose:          saveur.pct_fructose,
+        note:                  saveur.note ?? '',
+        stock_article_id:      saveur.stock_article_id ?? null,
+        stock_article_libelle: saveur.stock_article_libelle ?? '',
     });
-    dialogVisible.value = true;
+    stockRecherche.value  = '';
+    stockResultats.value  = [];
+    dialogVisible.value   = true;
 }
 
 function fermerDialog() {
@@ -119,12 +163,13 @@ async function sauvegarder() {
     saving.value = true;
     try {
         const payload = {
-            nom:          form.nom.trim(),
-            slug:         form.slug.trim(),
-            brix_cible:   form.brix_cible,
-            pa_cible:     form.pa_cible,
-            pct_fructose: form.pct_fructose,
-            note:         form.note.trim(),
+            nom:              form.nom.trim(),
+            slug:             form.slug.trim(),
+            brix_cible:       form.brix_cible,
+            pa_cible:         form.pa_cible,
+            pct_fructose:     form.pct_fructose,
+            note:             form.note.trim(),
+            stock_article_id: form.stock_article_id ?? null,
         };
 
         if (modeEdition.value) {
@@ -325,6 +370,56 @@ async function supprimer() {
                 />
             </div>
 
+            <!-- Liaison article /stock — édition uniquement -->
+            <div v-if="modeEdition" class="saveur-field">
+                <label>Article stock lié</label>
+                <small class="cruf-hint">
+                    Utilisé pour déclarer l'entrée en stock à la mise en jarres du lot.
+                </small>
+
+                <!-- Article actuellement lié -->
+                <div v-if="form.stock_article_id" class="stock-article-lié">
+                    <span class="stock-article-badge">
+                        <i class="pi pi-box"></i>
+                        {{ form.stock_article_libelle || 'Article #' + form.stock_article_id }}
+                    </span>
+                    <Button
+                        icon="pi pi-times"
+                        text rounded
+                        severity="danger"
+                        size="small"
+                        v-tooltip.top="'Supprimer la liaison'"
+                        @click="supprimerLiaisonStock"
+                    />
+                </div>
+
+                <!-- Champ de recherche -->
+                <div class="stock-search-wrap">
+                    <input
+                        type="text"
+                        class="p-inputtext p-component w-full"
+                        v-model="stockRecherche"
+                        @input="onStockInput"
+                        :placeholder="form.stock_article_id ? 'Changer l\'article lié…' : 'Rechercher un article stock…'"
+                        autocomplete="off"
+                    />
+                    <i v-if="stockChargement" class="pi pi-spin pi-spinner stock-search-spinner"></i>
+                </div>
+
+                <!-- Résultats -->
+                <div v-if="stockResultats.length" class="stock-resultats">
+                    <div
+                        v-for="article in stockResultats"
+                        :key="article.id"
+                        class="stock-resultat-item"
+                        @click="selectionnerArticle(article)"
+                    >
+                        <span class="stock-res-libelle">{{ article.libelle }}</span>
+                        <span class="stock-res-meta">{{ article.unite }} · {{ article.disponible }} disponible</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <template #footer>
@@ -508,5 +603,74 @@ async function supprimer() {
     font-size: 12px;
     color: #999;
     font-style: italic;
+}
+
+/* ── Liaison article stock ────────────────────────────────── */
+.stock-article-lié {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.stock-article-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #a5d6a7;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.stock-article-badge .pi { font-size: 12px; }
+
+.stock-search-wrap {
+    position: relative;
+}
+
+.stock-search-spinner {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #aaa;
+    font-size: 13px;
+}
+
+.stock-resultats {
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 4px;
+    background: var(--surface-card);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.stock-resultat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--surface-border);
+    transition: background 0.12s;
+}
+
+.stock-resultat-item:last-child { border-bottom: none; }
+.stock-resultat-item:hover { background: var(--surface-hover); }
+
+.stock-res-libelle {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.stock-res-meta {
+    font-size: 11px;
+    color: #999;
 }
 </style>

@@ -1,5 +1,5 @@
 # TODO — Module /crufiture
-**Mis à jour : 5 avril 2026 — v6**
+**Mis à jour : 7 avril 2026**
 
 ---
 
@@ -18,7 +18,7 @@
 - ✅ Migration BDD `cruf_recette_etape` (absente du schema v1)
 - ✅ Ajout `axiosPeyrounet.js` dans `src/plugins/`
 - ✅ Ajout `vuedraggable@^4.1.0` dans `package.json`
-- ✅ Workflow lots v2 défini (voir WORKFLOW-LOT-CRUFITURE-v2.md)
+- ✅ Workflow lots v2 défini (voir WORKFLOW-LOT-CRUFITURE.md)
 - ✅ **Migration BDD v3** (4 avril) — `cruf_lot` et `cruf_lot_fruit` alignés workflow v2
 - ✅ **Migration BDD v4** (5 avril) — PWA mobile production :
   - `cruf_lot` : + `tare_kg` DECIMAL(6,3) — poids à vide du matériel
@@ -51,6 +51,21 @@
 - ✅ **Bug api.php** — `$data` manquant dans l'appel `demarrer($m[1])` → corrigé en `demarrer($m[1], $data)`
 - ✅ **`LotController.php` `demarrer()`** — `datetime_debut` + validation `tare_kg` obligatoire + `bind_param` fixe
 - ✅ **`ProductionDemarrage.vue`** — label "Heure de mise en place"
+- ✅ **Migration BDD v6** — intégration `/stock` :
+  - `cruf_saveur` : + `stock_article_id INT UNSIGNED DEFAULT NULL` (FK logique vers `stock_article`)
+  - `cruf_lot_fruit` + `cruf_recette_ingredient` : ENUM `type` étendu → `pivot|fruit|additif|fructose|saccharose`
+  - Nouvelle table `cruf_stock_memoire_ingredient` (`produit_id` → `stock_article_id`, UNIQUE sur `produit_id`)
+- ✅ **Intégration `/stock` — fiche saveur** :
+  - `SaveurController.php` — `stock_article_id` lu (JOIN `stock_article` pour libellé) + écrit (GET/POST/PUT)
+  - `GestionSaveurs.vue` — champ liaison article stock dans le dialog édition, autocomplétion `GET /stock/api/articles?q=...`, badge article lié
+- ✅ **Intégration `/stock` — fiche recette** :
+  - `RecetteController.php` — `getOne()` retourne `stock_article_id` par ingrédient (JOIN `cruf_stock_memoire_ingredient`) ; `_saveIngredients()` fait l'UPSERT dans `cruf_stock_memoire_ingredient`
+  - `EditionRecette.vue` — champ liaison article stock par ingrédient (fruits + additifs + sucres), autocomplétion `/stock/api/articles?q=...`, pré-rempli cross-recettes depuis la mémoire
+- ✅ **Intégration `/stock` — `mettre-en-repos`** :
+  - `LotController.php` `mettreEnRepos()` → `declarerConsommationIntrants()` : `sortie_consommation` pour chaque ingrédient lié dans `cruf_stock_memoire_ingredient`. Switch sur `type` : `fructose` → `cruf_lot.fructose_kg`, `saccharose` → `cruf_lot.saccharose_kg`, autres → `poids_base_kg`. Non bloquant.
+- ✅ **Intégration `/stock` — `stocker`** :
+  - `LotController.php` `stocker()` → `declarerEntreeProduitFini()` : `entree_production` de `poids_reel_kg` sur `cruf_saveur.stock_article_id`. Ignoré si non renseigné. Non bloquant.
+- ✅ **`axiosStock.js`** — nouveau plugin `baseURL /stock/api`, ajouté dans `src/plugins/`
 
 ---
 
@@ -65,17 +80,13 @@
 - [ ] PWA installable iOS (Safari → Sur l'écran d'accueil)
 - [ ] PWA installable Android (Chrome → Installer l'application)
 - [ ] Icônes PNG générées (realfavicongenerator.net depuis icon-base.svg) et déployées
+- [ ] Intégration `/stock` — lier les articles dans les fiches saveurs et recettes existantes
+- [ ] Intégration `/stock` — vérifier les mouvements déclarés sur un premier lot réel
 
 ---
 
 ## Fonctionnalités futures (après lots v1)
 
-- [ ] **Intégration `/stock` — BDD** — migration schema : `stock_article_id` sur `cruf_saveur` + table `cruf_stock_memoire_ingredient`
-- [ ] **Intégration `/stock` — fiche saveur** — champ liaison `stock_article` (autocomplétion `GET /stock/api/articles?q=...`)
-- [ ] **Intégration `/stock` — fiche recette** — champ optionnel liaison `stock_article` par ingrédient, prérempli depuis `cruf_stock_memoire_ingredient`
-- [ ] **Intégration `/stock` — `mettre-en-repos`** — déclarer `sortie_consommation` fruits + fructose + saccharose + additifs (non bloquant, unité `kg`)
-- [ ] **Intégration `/stock` — `stocker`** — déclarer `entree_production` de `poids_reel_kg` sur l'article lié à la saveur (non bloquant, unité `kg`)
-- [ ] **Bloc 4 Krencker en `en_repos`** — verrouiller complètement (FicheLot.vue + backend `PUT /lots/:id`)
 - [ ] **Sorties de stock** — prélèvements par poids sur les jarres (vrac, pot 100g, pot 300g)
 - [ ] **Conditionnement** — coût par canal (vrac, pot 100g, pot 300g) + mouvements `/stock` associés
 - [ ] **Prix de revient** — appel `POST /peyrounet/api/inter/prix-revient` depuis un lot
@@ -89,5 +100,6 @@
 
 | Date | Modifications |
 |------|---------------|
-| 7 avril 2026 | Ajout tâches intégration `/stock` (BDD, fiche saveur, fiche recette, mettre-en-repos, stocker). Ajout tâche verrouillage bloc 4 Krencker en `en_repos`. Conditionnement enrichi (mouvements `/stock`). |
+| 7 avril 2026 | Intégration `/stock` complète : migration BDD v6, SaveurController, GestionSaveurs, RecetteController, EditionRecette, LotController (mettreEnRepos + stocker), axiosStock.js. |
+| 7 avril 2026 | Ajout tâches intégration `/stock`. Verrouillage bloc 4 Krencker en `en_repos`. |
 | 5 avril 2026 | v6 — PWA mobile complète |

@@ -5,6 +5,7 @@ import { useToast } from 'primevue/usetoast';
 import axiosCrufiture from '@/plugins/axiosCrufiture';
 import axios from '@/plugins/axios';
 import axiosPrix from '@/plugins/axiosPrix';
+import axiosStock from '@/plugins/axiosStock';
 import draggable from 'vuedraggable';
 
 const route  = useRoute();
@@ -37,16 +38,51 @@ function newKey() { return ++_keyCounter; }
 
 function ingredientVide(type) {
     return {
-        _key:         newKey(),
-        produit_id:   null,
-        produit_lib:  '',
-        type:         type,
-        pct_base:     null,
-        note:         '',
-        // autocomplétion
-        _suggestions: [],
-        _searching:   false,
+        _key:                newKey(),
+        produit_id:          null,
+        produit_lib:         '',
+        type:                type,
+        pct_base:            null,
+        note:                '',
+        stock_article_id:    null,
+        stock_article_libelle: '',
+        // autocomplétion produit /prix
+        _suggestions:        [],
+        _searching:          false,
+        // autocomplétion article /stock
+        _stockSuggestions:   [],
+        _stockSearching:     false,
     };
+}
+
+// ── Autocomplétion article /stock par ingrédient ──────────────
+let _stockDebounce = {};
+
+async function rechercherStock(ing, q) {
+    if (!q || q.length < 2) { ing._stockSuggestions = []; return; }
+    clearTimeout(_stockDebounce[ing._key]);
+    _stockDebounce[ing._key] = setTimeout(async () => {
+        ing._stockSearching = true;
+        try {
+            const res = await axiosStock.get('/articles', { params: { q } });
+            ing._stockSuggestions = Array.isArray(res.data) ? res.data : [];
+        } catch {
+            ing._stockSuggestions = [];
+        } finally {
+            ing._stockSearching = false;
+        }
+    }, 300);
+}
+
+function selectionnerStock(ing, article) {
+    ing.stock_article_id      = article.id;
+    ing.stock_article_libelle = article.libelle;
+    ing._stockSuggestions     = [];
+}
+
+function supprimerLiaisonStock(ing) {
+    ing.stock_article_id      = null;
+    ing.stock_article_libelle = '';
 }
 
 // ── Étapes ────────────────────────────────────────────────────────
@@ -210,15 +246,19 @@ async function chargerRecette() {
             additifs.value = [];
             for (const ing of r.ingredients) {
                 const item = {
-                    _key:         newKey(),
-                    produit_id:   ing.produit_id,
-                    produit_lib:  ing.libelle_canonique,
-                    type:         ing.type,
-                    pct_base:     ing.pct_base,
-                    note:         ing.note ?? '',
-                    _suggestions: [],
-                    _searching:   false,
-                };
+                        _key:                  newKey(),
+                        produit_id:            ing.produit_id,
+                        produit_lib:           ing.libelle_canonique,
+                        type:                  ing.type,
+                        pct_base:              ing.pct_base,
+                        note:                  ing.note ?? '',
+                        stock_article_id:      ing.stock_article_id ?? null,
+                        stock_article_libelle: ing.stock_article_libelle ?? '',
+                        _suggestions:          [],
+                        _searching:            false,
+                        _stockSuggestions:     [],
+                        _stockSearching:       false,
+                    };
                 if (ing.type === 'pivot' || ing.type === 'fruit') {
                     fruits.value.push(item);
                 } else {
@@ -260,18 +300,20 @@ function buildPayload() {
     const ingredients = [];
     fruits.value.forEach((f, idx) => {
         ingredients.push({
-            produit_id: f.produit_id,
-            type:       f.type,
-            pct_base:   f.pct_base,
-            note:       f.note || null,
+            produit_id:       f.produit_id,
+            type:             f.type,
+            pct_base:         f.pct_base,
+            note:             f.note || null,
+            stock_article_id: f.stock_article_id ?? null,
         });
     });
     additifs.value.forEach((a) => {
         ingredients.push({
-            produit_id: a.produit_id,
-            type:       'additif',
-            pct_base:   a.pct_base,
-            note:       a.note || null,
+            produit_id:       a.produit_id,
+            type:             a.type,
+            pct_base:         a.pct_base,
+            note:             a.note || null,
+            stock_article_id: a.stock_article_id ?? null,
         });
     });
 
@@ -460,6 +502,35 @@ function retourListe() {
                                         style="flex-shrink:0"
                                     />
                                 </div>
+
+                                <!-- Ligne 2 : liaison article /stock -->
+                                <div class="ed-stock-row">
+                                    <div v-if="fruit.stock_article_id" class="ed-stock-tag">
+                                        <i class="pi pi-box" style="font-size:10px" />
+                                        {{ fruit.stock_article_libelle || '#' + fruit.stock_article_id }}
+                                        <button class="ed-stock-clear" @click="supprimerLiaisonStock(fruits[idx])" type="button">×</button>
+                                    </div>
+                                    <div v-else class="ed-stock-search">
+                                        <input
+                                            type="text"
+                                            placeholder="Lier à un article stock…"
+                                            class="p-inputtext p-component ed-stock-input"
+                                            @input="rechercherStock(fruits[idx], $event.target.value)"
+                                        />
+                                        <i v-if="fruit._stockSearching" class="pi pi-spin pi-spinner ed-stock-spinner" />
+                                        <div v-if="fruit._stockSuggestions.length" class="ed-suggestions">
+                                            <div
+                                                v-for="a in fruit._stockSuggestions"
+                                                :key="a.id"
+                                                class="ed-suggestion-item"
+                                                @click="selectionnerStock(fruits[idx], a)"
+                                            >
+                                                <span class="ed-sugg-libelle">{{ a.libelle }}</span>
+                                                <span class="ed-sugg-cat">{{ a.unite }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         </template>
@@ -554,6 +625,35 @@ function retourListe() {
                             </div>
 
                             <Button icon="pi pi-trash" text rounded severity="danger" @click="supprimerAdditif(idx)" style="flex-shrink:0" />
+                        </div>
+
+                        <!-- Ligne stock additif -->
+                        <div class="ed-stock-row" style="padding: 0 0 6px 0">
+                            <div v-if="additif.stock_article_id" class="ed-stock-tag">
+                                <i class="pi pi-box" style="font-size:10px" />
+                                {{ additif.stock_article_libelle || '#' + additif.stock_article_id }}
+                                <button class="ed-stock-clear" @click="supprimerLiaisonStock(additifs[idx])" type="button">×</button>
+                            </div>
+                            <div v-else class="ed-stock-search">
+                                <input
+                                    type="text"
+                                    placeholder="Lier à un article stock…"
+                                    class="p-inputtext p-component ed-stock-input"
+                                    @input="rechercherStock(additifs[idx], $event.target.value)"
+                                />
+                                <i v-if="additif._stockSearching" class="pi pi-spin pi-spinner ed-stock-spinner" />
+                                <div v-if="additif._stockSuggestions.length" class="ed-suggestions">
+                                    <div
+                                        v-for="a in additif._stockSuggestions"
+                                        :key="a.id"
+                                        class="ed-suggestion-item"
+                                        @click="selectionnerStock(additifs[idx], a)"
+                                    >
+                                        <span class="ed-sugg-libelle">{{ a.libelle }}</span>
+                                        <span class="ed-sugg-cat">{{ a.unite }}</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         </template>
                     </draggable>
@@ -938,6 +1038,54 @@ function retourListe() {
     font-weight: 700;
     color: #bbb;
     line-height: 1;
+}
+
+/* ── Liaison article /stock par ingrédient ───────────────────── */
+.ed-stock-row {
+    margin-top: 5px;
+    position: relative;
+}
+
+.ed-stock-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 11px;
+    color: #1565c0;
+}
+
+.ed-stock-clear {
+    background: none;
+    border: none;
+    color: #1565c0;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 0 0 2px;
+}
+
+.ed-stock-search {
+    position: relative;
+}
+
+.ed-stock-input {
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+    height: auto !important;
+    color: #666;
+}
+
+.ed-stock-spinner {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: #aaa;
 }
 
 /* ── Utilitaires ─────────────────────────────────────────────── */

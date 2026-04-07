@@ -631,6 +631,9 @@ class LotController
         $stmt2->execute();
         $stmt2->close();
 
+        // ── Mouvements /stock — consommation intrants (non bloquant) ──
+        $this->declarerConsommationIntrants($id);
+
         echo ResponseHelper::jsonResponse('Lot mis en repos.', 'success', ['id' => $id, 'statut' => 'en_repos']);
     }
 
@@ -783,6 +786,9 @@ class LotController
         if (!empty($data['controle'])) {
             $this->insertControle($id, $data['controle'], 'mise_en_pot');
         }
+
+        // ── Mouvement /stock — entrée produit fini (non bloquant) ──
+        $this->declarerEntreeProduitFini($id, $poids_reel);
 
         echo ResponseHelper::jsonResponse('Lot passé en stock.', 'success', [
             'id'           => $id,
@@ -983,6 +989,139 @@ class LotController
         $stmt->bind_param('issdddss', $lot_id, $date_ctrl, $type_ctrl, $brix_mesure, $aw_mesure, $ph_mesure, $aspect, $remarque_c);
         $stmt->execute();
         $stmt->close();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Mouvements /stock — consommation intrants (mettre-en-repos)
+    // Non bloquant : une erreur /stock ne doit pas bloquer la transition.
+    //
+    // Types et quantités déclarées :
+    //   pivot, fruit, additif → poids_base_kg de la ligne cruf_lot_fruit
+    //   fructose              → cruf_lot.fructose_kg  (calculé Krencker)
+    //   saccharose            → cruf_lot.saccharose_kg (calculé Krencker)
+    //
+    // Seules les lignes ayant un lien dans cruf_stock_memoire_ingredient
+    // donnent lieu à un mouvement. Les autres sont ignorées silencieusement.
+    // ─────────────────────────────────────────────────────────────
+    private function declarerConsommationIntrants($lot_id)
+    {
+        try {
+            // Récupérer fructose_kg et saccharose_kg du lot (Krencker)
+            $stmt = $this->mysqli->prepare(
+                "SELECT fructose_kg, saccharose_kg FROM cruf_lot WHERE id = ?"
+            );
+            $stmt->bind_param('i', $lot_id);
+            $stmt->execute();
+            $lot_row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if (!$lot_row) return;
+
+            $fructose_kg   = (float) $lot_row['fructose_kg'];
+            $saccharose_kg = (float) $lot_row['saccharose_kg'];
+
+            // Récupérer tous les ingrédients du lot ayant un lien stock mémorisé
+            $stmt2 = $this->mysqli->prepare(
+                "SELECT lf.type, lf.poids_base_kg, sm.stock_article_id
+                 FROM cruf_lot_fruit lf
+                 JOIN cruf_stock_memoire_ingredient sm ON sm.produit_id = lf.produit_id
+                 WHERE lf.lot_id = ?"
+            );
+            $stmt2->bind_param('i', $lot_id);
+            $stmt2->execute();
+            $ingredients = $stmt2->get_result()->fetchAll(MYSQLI_ASSOC);
+            $stmt2->close();
+
+            if (empty($ingredients)) return;
+
+            require_once $_SERVER['DOCUMENT_ROOT'] . '/stock/api/controllers/StockMouvementController.php';
+            $mouvCtrl = new StockMouvementController($this->mysqli);
+
+            foreach ($ingredients as $ing) {
+                $stock_article_id = (int) $ing['stock_article_id'];
+
+                switch ($ing['type']) {
+                    case 'fructose':
+                        $qte = $fructose_kg;
+                        break;
+                    case 'saccharose':
+                        $qte = $saccharose_kg;
+                        break;
+                    default:
+                        // pivot, fruit, additif
+                        $qte = (float) $ing['poids_base_kg'];
+                        break;
+                }
+
+                if ($qte <= 0) continue;
+
+                $result = $mouvCtrl->enregistrerMouvement([
+                    'article_id'     => $stock_article_id,
+                    'type'           => 'sortie_consommation',
+                    'quantite'       => $qte,
+                    'unite'          => 'kg',
+                    'source_service' => 'crufiture',
+                    'source_id'      => $lot_id,
+                ]);
+
+                if (isset($result['erreur'])) {
+                    error_log('[crufiture] declarerConsommationIntrants lot_id=' . $lot_id
+                        . ' article_id=' . $stock_article_id . ' : ' . $result['erreur']);
+                }
+            }
+
+        } catch (\Throwable $e) {
+            error_log('[crufiture] declarerConsommationIntrants lot_id=' . $lot_id . ' : ' . $e->getMessage());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Mouvements /stock — entrée produit fini (stocker)
+    // Non bloquant : une erreur /stock ne doit pas bloquer la transition.
+    // Article cible : stock_article_id de la saveur du lot.
+    // Si la saveur n'a pas de stock_article_id → ignoré silencieusement.
+    // ─────────────────────────────────────────────────────────────
+    private function declarerEntreeProduitFini($lot_id, $poids_reel_kg)
+    {
+        try {
+            if ($poids_reel_kg <= 0) return;
+
+            // Récupérer le stock_article_id de la saveur
+            $stmt = $this->mysqli->prepare(
+                "SELECT s.stock_article_id
+                 FROM cruf_lot l
+                 JOIN cruf_saveur s ON s.id = l.saveur_id
+                 WHERE l.id = ?"
+            );
+            $stmt->bind_param('i', $lot_id);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if (!$row || !$row['stock_article_id']) {
+                error_log('[crufiture] declarerEntreeProduitFini lot_id=' . $lot_id . ' : saveur sans stock_article_id — ignoré');
+                return;
+            }
+
+            require_once $_SERVER['DOCUMENT_ROOT'] . '/stock/api/controllers/StockMouvementController.php';
+            $mouvCtrl = new StockMouvementController($this->mysqli);
+
+            $result = $mouvCtrl->enregistrerMouvement([
+                'article_id'     => (int) $row['stock_article_id'],
+                'type'           => 'entree_production',
+                'quantite'       => $poids_reel_kg,
+                'unite'          => 'kg',
+                'source_service' => 'crufiture',
+                'source_id'      => $lot_id,
+            ]);
+
+            if (isset($result['erreur'])) {
+                error_log('[crufiture] declarerEntreeProduitFini lot_id=' . $lot_id . ' : ' . $result['erreur']);
+            }
+
+        } catch (\Throwable $e) {
+            error_log('[crufiture] declarerEntreeProduitFini lot_id=' . $lot_id . ' : ' . $e->getMessage());
+        }
     }
 
     private function castLotRow($row)

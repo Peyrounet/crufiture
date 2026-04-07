@@ -1,5 +1,5 @@
 # Module /crufiture — Document de référence
-**v8 — 5 avril 2026**
+**v9 — 7 avril 2026**
 *À fournir en début de toute nouvelle discussion sur ce module*
 
 ---
@@ -18,12 +18,13 @@ Module métier de la ferme du Peyrounet. Consomme `/monpanier` (auth, BDD) et `/
 | Variable .env | `CRUFITURE_FOLDER=/crufiture` |
 | Activité comptable | Cruficulture [id=5] |
 | Thème | aura-light-amber |
-| Statut | En production — v8 (saveurs + recettes + lots bureau + PWA mobile complets) |
+| Statut | En production — v9 (saveurs + recettes + lots bureau + PWA mobile + intégration /stock complets) |
 
 ### Dépendances
 
 - `/monpanier` — auth JWT, BDD MySQL, emails
 - `/peyrounet` — compta (`POST /compta/ecriture`), relevés de prix (`POST /inter/prix-revient`), autocomplétion produits (`GET /inter/produits`)
+- `/stock` — mouvements de stock (`enregistrerMouvement()`), recherche articles (`GET /stock/api/articles`)
 - `/ferme` — expose `GET /crufiture/api/ferme-widget` (contrat ferme-widget v1)
 
 ---
@@ -47,16 +48,17 @@ Module métier de la ferme du Peyrounet. Consomme `/monpanier` (auth, BDD) et `/
 
 ## 3. Schéma BDD — tables cruf_*
 
-9 tables dans la base `u191509486_dbboutique`. Référence : `schema_crufiture_v4.sql`. Migration v4 exécutée en prod le 5 avril 2026.
+11 tables dans la base `u191509486_dbboutique`. Référence : `schema_crufiture.sql` (v6 — migration intégration /stock). Migration v6 exécutée en prod le 7 avril 2026.
 
 | Table | Rôle |
 |---|---|
-| `cruf_saveur` | Référentiel des saveurs avec paramètres de formulation par défaut (brix_cible, pa_cible, pct_fructose) |
+| `cruf_saveur` | Référentiel des saveurs avec paramètres de formulation par défaut (brix_cible, pa_cible, pct_fructose) + `stock_article_id` (produit fini) |
+| `cruf_stock_memoire_ingredient` | Mémoire locale : `produit_id` → `stock_article_id`. Clé unique sur `produit_id`, cross-recettes. |
 | `cruf_recette` | Fiche technique de préparation liée à une saveur — plusieurs versions peuvent coexister |
-| `cruf_recette_ingredient` | Ingrédients d'une recette — `type` pivot/fruit/additif, `pct_base`, lien obligatoire vers `rp_produit` |
+| `cruf_recette_ingredient` | Ingrédients d'une recette — `type` pivot/fruit/additif/fructose/saccharose, `pct_base`, lien obligatoire vers `rp_produit` |
 | `cruf_recette_etape` | Étapes de préparation ordonnées et réordonnables |
 | `cruf_lot` | Cœur du module — un lot = une session de production complète |
-| `cruf_lot_fruit` | Ingrédients utilisés dans un lot avec poids et traçabilité |
+| `cruf_lot_fruit` | Ingrédients utilisés dans un lot avec poids et traçabilité — `type` étendu : pivot/fruit/additif/fructose/saccharose |
 | `cruf_jarre` | Stockage en jarres (sans limite) avec tare, poids pleine, poids initial calculé |
 | `cruf_releve_evaporation` | Relevés de pesée pendant la production (heure, poids net, météo structurée) |
 | `cruf_controle` | Contrôles qualité (Brix, Aw, pH) — plusieurs par lot, 1 obligatoire avant stock |
@@ -72,10 +74,10 @@ Module métier de la ferme du Peyrounet. Consomme `/monpanier` (auth, BDD) et `/
 ### cruf_lot_fruit — colonnes clés (v4)
 
 - `produit_id` — FK rp_produit (peyrounet), libellé par jointure, jamais copié localement
-- `type` — ENUM `pivot | fruit | additif`
-- `pct_base` — NULL pour pivot ; % du pivot pour fruits ; % base totale fruits pour additifs
-- `poids_brut_kg`, `poids_pulpe_kg` — pivot et fruits uniquement, NULL pour additifs
-- `poids_base_kg` — poids net dans la formule Krencker
+- `type` — ENUM `pivot | fruit | additif | fructose | saccharose`
+- `pct_base` — NULL pour pivot ; % du pivot pour fruits ; % base totale fruits pour additifs ; NULL pour fructose/saccharose
+- `poids_brut_kg`, `poids_pulpe_kg` — pivot et fruits uniquement, NULL pour additifs/sucres
+- `poids_base_kg` — poids net dans la formule Krencker (NULL pour fructose/saccharose — quantité issue de Krencker)
 
 ### cruf_releve_evaporation — colonnes clés (v4)
 
@@ -228,9 +230,9 @@ crufiture/api/
     ├── PingController.php
     ├── FermeWidgetController.php
     ├── DashboardController.php
-    ├── SaveurController.php
-    ├── RecetteController.php
-    └── LotController.php       ← v4 (5 avril 2026) — météo structurée, tare, jarres
+    ├── SaveurController.php    ← v2 (7 avril 2026) — stock_article_id lu/écrit, JOIN stock_article pour libellé
+    ├── RecetteController.php   ← v2 (7 avril 2026) — stock_article_id par ingrédient, UPSERT cruf_stock_memoire_ingredient
+    └── LotController.php       ← v5 (7 avril 2026) — mouvements /stock : declarerConsommationIntrants + declarerEntreeProduitFini
 ```
 
 ### Frontend bureau
@@ -250,7 +252,8 @@ crufiture/src/
 ├── plugins/
 │   ├── axios.js                    ← baseURL /monpanier/api
 │   ├── axiosCrufiture.js           ← baseURL /crufiture/api
-│   └── axiosPeyrounet.js           ← baseURL /peyrounet/api, withCredentials: true
+│   ├── axiosPeyrounet.js           ← baseURL /peyrounet/api, withCredentials: true
+│   └── axiosStock.js               ← baseURL /stock/api, withCredentials: true
 ├── router/index.js                 ← routes bureau + routes /production/* (PWA)
 ├── stores/
 ├── components/PageCard.vue
@@ -509,7 +512,9 @@ Si l'utilisateur revient en arrière sans valider → lot reste `en_repos`, aucu
 | Bloc 4 verrouillé en `en_repos` | Tous les blocs sont verrouillés dès `en_repos` — plus seulement 1/2/3. Les sucres sont pesés, la recette est faite. |
 | Mouvements `/stock` non bloquants | Une erreur retournée par `/stock` ne doit jamais bloquer la transition du lot. Logger l'erreur, continuer. |
 | Unité vers `/stock` | Toujours transmettre en `kg`. C'est `/stock` qui gère la conversion vers son `unite_reference`. |
-| `cruf_stock_memoire_ingredient` | Clé = `produit_id`. Liaison optionnelle — ingrédients sans lien ignorés silencieusement. |
+| `cruf_recette_ingredient.type` | ENUM étendu : `pivot\|fruit\|additif\|fructose\|saccharose`. Fructose et saccharose : quantité issue de Krencker (`cruf_lot.fructose_kg` / `saccharose_kg`), pas de `poids_base_kg`. |
+| `cruf_stock_memoire_ingredient` | Clé = `produit_id`. Liaison optionnelle — ingrédients sans lien ignorés silencieusement. UPSERT à chaque sauvegarde recette. Cross-recettes : un même produit mémorisé une fois s'applique à toutes les recettes. |
+| `axiosStock` | Instance séparée `baseURL: '/stock/api'`, `withCredentials: true`. Recherche articles : `GET /stock/api/articles?q=...`. |
 | `cruf_saveur.stock_article_id` | FK optionnelle vers `stock_article`. Si NULL au moment du `stocker`, entrée produit fini ignorée (log). |
 | Abandon après `en_repos` | Consommations intrants déjà déclarées à `/stock` — pas de contre-passation. Perte déclarable manuellement depuis `/stock/dashboard`. |
 
@@ -517,7 +522,7 @@ Si l'utilisateur revient en arrière sans valider → lot reste `en_repos`, aucu
 
 ## 13. Déploiement
 
-### Checklist validée en prod (v7 — 5 avril 2026)
+### Checklist validée en prod (v9 — 7 avril 2026)
 
 - ✅ Migration BDD v3 exécutée (4 avril)
 - ✅ Migration BDD v5 exécutée (5 avril) — datetime_debut
@@ -534,6 +539,13 @@ Si l'utilisateur revient en arrière sans valider → lot reste `en_repos`, aucu
 - ✅ PWA routes déployées (`/production/*`)
 - ✅ ProductionLayout, Accueil, Demarrage, Pesee, Historique, Stock déployés
 - ✅ manifest.json + index.html PWA + icon-base.svg déployés
+- ✅ Migration BDD v6 exécutée (7 avril) — stock_article_id sur cruf_saveur, cruf_stock_memoire_ingredient, ENUM fructose/saccharose
+- ✅ SaveurController.php v2 — stock_article_id
+- ✅ RecetteController.php v2 — stock_article_id par ingrédient
+- ✅ LotController.php v5 — mouvements /stock
+- ✅ GestionSaveurs.vue — liaison article produit fini
+- ✅ EditionRecette.vue — liaison article stock par ingrédient
+- ✅ axiosStock.js déployé dans src/plugins/
 
 ### À valider en prod
 
@@ -572,9 +584,10 @@ RewriteRule ^crufiture/ /crufiture/index.html [L]
 
 | Date | Modifications |
 |------|---------------|
-| 7 avril 2026 | Bloc 4 Krencker verrouillé en `en_repos` (tous les blocs verrouillés dès `en_repos`). Mise à jour tableau verrouillage FicheLot, règles métier, route `PUT /lots/:id`, checklist déploiement. Ajout points d'attention `/stock` (mouvements non bloquants, unités, `cruf_stock_memoire_ingredient`, `cruf_saveur.stock_article_id`, abandon). |
+| 7 avril 2026 | v9 — Intégration `/stock` complète. Migration BDD v6 (cruf_stock_memoire_ingredient, stock_article_id sur cruf_saveur, ENUM fructose/saccharose). SaveurController v2, RecetteController v2, LotController v5, GestionSaveurs, EditionRecette, axiosStock.js. Dépendance `/stock` ajoutée. |
+| 7 avril 2026 | Bloc 4 Krencker verrouillé en `en_repos`. Points d'attention `/stock`. |
 | 5 avril 2026 | v8 — PWA mobile complète, météo structurée, datetime_debut, schema v5 |
 
 ---
 
-*Ferme du Peyrounet — Module /crufiture — 7 avril 2026*
+*Ferme du Peyrounet — Module /crufiture — 7 avril 2026 — v9*

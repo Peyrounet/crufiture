@@ -20,18 +20,23 @@ class SaveurController
     public function getAll()
     {
         $result = $this->mysqli->query(
-            "SELECT id, nom, slug, brix_cible, pa_cible, pct_fructose, note, actif, created_at
-             FROM cruf_saveur
-             ORDER BY nom ASC"
+            "SELECT s.id, s.nom, s.slug, s.brix_cible, s.pa_cible, s.pct_fructose,
+                    s.note, s.stock_article_id, s.actif, s.created_at,
+                    sa.libelle AS stock_article_libelle
+             FROM cruf_saveur s
+             LEFT JOIN stock_article sa ON sa.id = s.stock_article_id
+             ORDER BY s.nom ASC"
         );
 
         $saveurs = [];
         while ($row = $result->fetch_assoc()) {
-            $row['id']           = (int)   $row['id'];
-            $row['actif']        = (int)   $row['actif'];
-            $row['brix_cible']   = (float) $row['brix_cible'];
-            $row['pa_cible']     = (float) $row['pa_cible'];
-            $row['pct_fructose'] = (float) $row['pct_fructose'];
+            $row['id']                    = (int)   $row['id'];
+            $row['actif']                 = (int)   $row['actif'];
+            $row['brix_cible']            = (float) $row['brix_cible'];
+            $row['pa_cible']              = (float) $row['pa_cible'];
+            $row['pct_fructose']          = (float) $row['pct_fructose'];
+            $row['stock_article_id']      = $row['stock_article_id'] !== null ? (int) $row['stock_article_id'] : null;
+            $row['stock_article_libelle'] = $row['stock_article_libelle'] ?? null;
             $saveurs[] = $row;
         }
 
@@ -41,13 +46,15 @@ class SaveurController
     // ── POST /saveurs ─────────────────────────────────────────────
     public function create($data)
     {
-        $nom          = trim($data['nom']  ?? '');
-        $slug         = trim($data['slug'] ?? '');
-        $brix_cible   = (float) ($data['brix_cible']   ?? 70);
-        $pa_cible     = (float) ($data['pa_cible']     ?? 68);
-        $pct_fructose = (float) ($data['pct_fructose'] ?? 50);
-        $note         = (isset($data['note']) && $data['note'] !== '') ? $data['note'] : null;
-        $actif        = 1;
+        $nom              = trim($data['nom']  ?? '');
+        $slug             = trim($data['slug'] ?? '');
+        $brix_cible       = (float) ($data['brix_cible']   ?? 70);
+        $pa_cible         = (float) ($data['pa_cible']     ?? 68);
+        $pct_fructose     = (float) ($data['pct_fructose'] ?? 50);
+        $note             = (isset($data['note']) && $data['note'] !== '') ? $data['note'] : null;
+        $stock_article_id = (isset($data['stock_article_id']) && $data['stock_article_id'] !== '' && $data['stock_article_id'] !== null)
+                            ? (int) $data['stock_article_id'] : null;
+        $actif            = 1;
 
         if ($nom === '' || $slug === '') {
             echo ResponseHelper::jsonResponse('Nom et slug obligatoires.', 'error', null, 400);
@@ -55,11 +62,11 @@ class SaveurController
         }
 
         $stmt = $this->mysqli->prepare(
-            "INSERT INTO cruf_saveur (nom, slug, brix_cible, pa_cible, pct_fructose, note, actif)
-             VALUES (?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO cruf_saveur (nom, slug, brix_cible, pa_cible, pct_fructose, note, stock_article_id, actif)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         );
-        // types : s s d d d s i
-        $stmt->bind_param('ssdddsi', $nom, $slug, $brix_cible, $pa_cible, $pct_fructose, $note, $actif);
+        // types : s s d d d s i i
+        $stmt->bind_param('ssdddsii', $nom, $slug, $brix_cible, $pa_cible, $pct_fructose, $note, $stock_article_id, $actif);
 
         if (!$stmt->execute()) {
             if ($this->mysqli->errno === 1062) {
@@ -77,14 +84,16 @@ class SaveurController
     // ── PUT /saveurs/:id ──────────────────────────────────────────
     public function update($id, $data)
     {
-        $id           = (int)   $id;
-        $nom          = trim($data['nom']  ?? '');
-        $slug         = trim($data['slug'] ?? '');
-        $brix_cible   = (float) ($data['brix_cible']   ?? 70);
-        $pa_cible     = (float) ($data['pa_cible']     ?? 68);
-        $pct_fructose = (float) ($data['pct_fructose'] ?? 50);
-        $note         = (isset($data['note']) && $data['note'] !== '') ? $data['note'] : null;
-        $actif        = (int) ($data['actif'] ?? 1);
+        $id               = (int)   $id;
+        $nom              = trim($data['nom']  ?? '');
+        $slug             = trim($data['slug'] ?? '');
+        $brix_cible       = (float) ($data['brix_cible']   ?? 70);
+        $pa_cible         = (float) ($data['pa_cible']     ?? 68);
+        $pct_fructose     = (float) ($data['pct_fructose'] ?? 50);
+        $note             = (isset($data['note']) && $data['note'] !== '') ? $data['note'] : null;
+        $stock_article_id = (isset($data['stock_article_id']) && $data['stock_article_id'] !== '' && $data['stock_article_id'] !== null)
+                            ? (int) $data['stock_article_id'] : null;
+        $actif            = (int) ($data['actif'] ?? 1);
 
         if ($nom === '' || $slug === '') {
             echo ResponseHelper::jsonResponse('Nom et slug obligatoires.', 'error', null, 400);
@@ -93,11 +102,11 @@ class SaveurController
 
         $stmt = $this->mysqli->prepare(
             "UPDATE cruf_saveur
-             SET nom=?, slug=?, brix_cible=?, pa_cible=?, pct_fructose=?, note=?, actif=?
+             SET nom=?, slug=?, brix_cible=?, pa_cible=?, pct_fructose=?, note=?, stock_article_id=?, actif=?
              WHERE id=?"
         );
-        // types : s s d d d s i i
-        $stmt->bind_param('ssdddsii', $nom, $slug, $brix_cible, $pa_cible, $pct_fructose, $note, $actif, $id);
+        // types : s s d d d s i i i
+        $stmt->bind_param('ssdddsiii', $nom, $slug, $brix_cible, $pa_cible, $pct_fructose, $note, $stock_article_id, $actif, $id);
 
         if (!$stmt->execute()) {
             if ($this->mysqli->errno === 1062) {

@@ -1,5 +1,5 @@
 # Workflow — Gestion des lots /crufiture
-**v3 — 5 avril 2026**
+**v4 — 7 avril 2026**
 *À fournir en début de toute discussion sur les lots, le suivi de production et la PWA mobile*
 
 ---
@@ -111,7 +111,7 @@ Grisés tant que `poids_base_kg` total fruits non renseigné.
 ### Bloc 4 — Krencker
 
 **Déverrouillé quand tous les `poids_brut_kg` non-pivot saisis.**
-**Reste éditable en statut `en_repos`** (les autres blocs sont verrouillés).
+**Verrouillé dès passage en `en_repos`** — tous les blocs sont en lecture seule à partir de ce statut.
 
 Totaux en lecture seule : `poids_brut_kg`, `poids_pulpe_kg`, `poids_base_kg` (pivot + fruits).
 
@@ -153,7 +153,7 @@ Le formulaire de démarrage capture le contexte physique de production :
 
 | Champ | Stockage | Obligatoire |
 |---|---|---|
-| Heure de début | `cruf_lot.heure_debut` | Auto (modifiable) |
+| Heure de début | `cruf_lot.datetime_debut` | Auto (modifiable) |
 | Installation | `cruf_lot.installation` | Non |
 | **Tare plaque** (à vide) | `cruf_lot.tare_kg` | Oui |
 | **Poids brut initial** (plateau + mélange) | → 1er relevé | Oui |
@@ -454,5 +454,6 @@ Hors scope v1 — matériel réutilisable, pas de `sortie_consommation` pour les
 
 | Date | Modifications |
 |------|---------------|
+| 7 avril 2026 | v4 — Bloc 4 Krencker verrouillé en `en_repos` (correction ligne contradictoire). `heure_debut` → `datetime_debut` dans tableau PWA démarrage. |
 | 7 avril 2026 | Bloc 4 Krencker verrouillé en `en_repos` (recette terminée, sucres déjà pesés). Ajout section mouvements `/stock` (consommations intrants à `en_repos`, entrée produit fini à `stock`, liaisons saveur/ingrédients, jarres hors scope v1). Règles métier mises à jour. |
 | 5 avril 2026 | v3 — PWA mobile, météo structurée, datetime_debut |
