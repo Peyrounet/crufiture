@@ -70,9 +70,24 @@
 
 ## Fonctionnalités futures (après lots v1)
 
+- [ ] **Intégration `/stock` — BDD** — migration schema : `stock_article_id` sur `cruf_saveur` + table `cruf_stock_memoire_ingredient`
+- [ ] **Intégration `/stock` — fiche saveur** — champ liaison `stock_article` (autocomplétion `GET /stock/api/articles?q=...`)
+- [ ] **Intégration `/stock` — fiche recette** — champ optionnel liaison `stock_article` par ingrédient, prérempli depuis `cruf_stock_memoire_ingredient`
+- [ ] **Intégration `/stock` — `mettre-en-repos`** — déclarer `sortie_consommation` fruits + fructose + saccharose + additifs (non bloquant, unité `kg`)
+- [ ] **Intégration `/stock` — `stocker`** — déclarer `entree_production` de `poids_reel_kg` sur l'article lié à la saveur (non bloquant, unité `kg`)
+- [ ] **Bloc 4 Krencker en `en_repos`** — verrouiller complètement (FicheLot.vue + backend `PUT /lots/:id`)
 - [ ] **Sorties de stock** — prélèvements par poids sur les jarres (vrac, pot 100g, pot 300g)
+- [ ] **Conditionnement** — coût par canal (vrac, pot 100g, pot 300g) + mouvements `/stock` associés
 - [ ] **Prix de revient** — appel `POST /peyrounet/api/inter/prix-revient` depuis un lot
-- [ ] **Conditionnement** — coût par canal (vrac, pot 100g, pot 300g)
 - [ ] **Canaux de distribution** — marge et facturation par canal (revendeur, direct, boutique)
 - [ ] **Capteur bluetooth** — récupération auto température/humidité/vent pendant la production (champs déjà prêts en BDD)
 - [ ] **Calcul à rebours PWA** — afficher la suggestion de poids brut nécessaire sur l'écran de démarrage
+
+---
+
+## Changelog
+
+| Date | Modifications |
+|------|---------------|
+| 7 avril 2026 | Ajout tâches intégration `/stock` (BDD, fiche saveur, fiche recette, mettre-en-repos, stocker). Ajout tâche verrouillage bloc 4 Krencker en `en_repos`. Conditionnement enrichi (mouvements `/stock`). |
+| 5 avril 2026 | v6 — PWA mobile complète |

@@ -130,10 +130,9 @@ Résultats Krencker affichés en temps réel.
 ## Phase en_repos
 
 **Statut : `en_repos`**
-**La fiche reste modifiable pour le bloc 4 uniquement.**
-**Blocs 1, 2, 3 verrouillés.**
+**Fiche entièrement verrouillée — blocs 1, 2, 3 et 4 tous en lecture seule.**
 
-Lot en chambre froide. Visible dans la liste et le menu suivi.
+Lot en chambre froide. Recette terminée, fruits et sucres déjà pesés et mélangés — aucune modification possible. Visible dans la liste et le menu suivi.
 
 **Bouton "Démarrer la production"** (bureau ou PWA) :
 → Statut passe à `production` → fiche verrouillée définitivement.
@@ -369,17 +368,71 @@ Saisie jarres (tare + pleine → contenu calculé) + résumé perte + contrôle 
 
 ---
 
+## Mouvements de stock vers `/stock`
+
+### Principe
+
+`/crufiture` déclare ses mouvements vers le service `/stock` via `require_once` PHP direct (jamais HTTP).
+Les mouvements sont non bloquants — une erreur `/stock` ne doit pas empêcher la transition du lot.
+
+### Phase 1 — Consommation intrants (`preparation` → `en_repos`)
+
+Déclenchée par `PUT /lots/:id/mettre-en-repos`.
+
+Pour chaque ingrédient du lot ayant un lien dans `cruf_stock_memoire_ingredient` :
+- Fruits (pivot + autres) → `sortie_consommation` de `poids_base_kg`
+- Fructose → `sortie_consommation` de `fructose_kg` (calculé Krencker)
+- Saccharose → `sortie_consommation` de `saccharose_kg` (calculé Krencker)
+- Additifs → `sortie_consommation` de `poids_base_kg`
+
+Les ingrédients sans lien dans `cruf_stock_memoire_ingredient` sont ignorés silencieusement (ex : fleurs de sureau).
+
+**Unité transmise :** toujours `kg`. C'est `/stock` qui gère la conversion vers son unité de référence interne.
+
+**Traçabilité :** `source_service = 'crufiture'`, `source_id = lot_id`.
+
+**Abandon :** si le lot est abandonné depuis `en_repos` ou `production`, les consommations restent déclarées — les denrées ont bien été consommées. Une déclaration de perte manuelle reste possible depuis `/stock/dashboard`.
+
+### Phase 2 — Entrée produit fini (`production` → `stock`)
+
+Déclenchée par `PUT /lots/:id/stocker`.
+
+- Article cible : `stock_article_id` lié à la saveur du lot (colonne `stock_article_id` sur `cruf_saveur`)
+- Quantité : `poids_reel_kg` du lot (somme réelle des contenus jarres — pas `cible_kg` théorique)
+- Type : `entree_production`
+- Unité transmise : `kg`
+- Traçabilité : `source_service = 'crufiture'`, `source_id = lot_id`
+
+Si la saveur n'a pas de `stock_article_id` renseigné → mouvement ignoré silencieusement (log à prévoir).
+
+### Liaison saveurs → stock
+
+La colonne `stock_article_id` est portée par `cruf_saveur`. Elle se renseigne dans la **fiche saveur** (bureau) via un champ de recherche autocomplétion `GET /stock/api/articles?q=...`. La liaison est faite une fois, elle s'applique à tous les lots de cette saveur.
+
+### Liaison ingrédients → stock
+
+Table locale `cruf_stock_memoire_ingredient` — clé : `produit_id` (article `/prix`).
+La liaison est optionnelle : seuls les ingrédients gérés en stock y figurent.
+Elle se renseigne dans la **fiche recette** (bureau), champ optionnel par ingrédient.
+Préremplissage automatique cross-recettes : si un `produit_id` est déjà mémorisé, le champ se prérempli à l'ouverture de toute recette qui utilise cet ingrédient.
+
+### Jarres
+
+Hors scope v1 — matériel réutilisable, pas de `sortie_consommation` pour les jarres.
+
+---
+
 ## Règles métier
 
 | Règle | Détail |
 |---|---|
 | Numéro de lot | Généré à la première sauvegarde (bloc 1). Format `YY` + 4 chiffres. Remis à `0001` le 1er janvier. Jamais réutilisé. |
 | Recette | Obligatoire — pas de lot sans recette. |
-| Fiche modifiable | Statuts `preparation` et `en_repos` uniquement. |
-| Fiche verrouillée | Dès passage en `production`. Aucune modification possible. |
-| Transition → `en_repos` | Requiert : bloc 4 complet, `brix_fruit` renseigné, `poids_base_kg` ≤ `poids_pulpe_kg`, `brix_fruit` < `brix_cible`. |
+| Fiche modifiable | Statut `preparation` uniquement. |
+| Fiche verrouillée | Dès passage en `en_repos`. Aucune modification possible. |
+| Transition → `en_repos` | Requiert : bloc 4 complet, `brix_fruit` renseigné, `poids_base_kg` ≤ `poids_pulpe_kg`, `brix_fruit` < `brix_cible`. Déclenche les mouvements de stock (consommations intrants). |
 | Transition → `production` | Aucune condition supplémentaire — le lot est prêt dès `en_repos`. |
-| Transition → `stock` | Requiert : ≥ 1 relevé avec poids net ≤ `cible_kg` + ≥ 1 contrôle qualité. |
+| Transition → `stock` | Requiert : ≥ 1 relevé avec poids net ≤ `cible_kg` + ≥ 1 contrôle qualité. Déclenche l'entrée du produit fini dans `/stock`. |
 | Tare plaque | Saisie une fois au démarrage (PWA). Stockée sur `cruf_lot.tare_kg`. Non ressaisie aux relevés suivants. |
 | `poids_brut_kg` relevé | Stocke le poids **net** (tare déjà déduite côté frontend). Ne pas confondre avec le brut lu sur la balance. |
 | `poids_brut_kg` du lot | Calculé = somme pivot + fruits uniquement. Non modifiable. |
@@ -391,3 +444,15 @@ Saisie jarres (tare + pleine → contenu calculé) + résumé perte + contrôle 
 | Lots simultanés | Normal (1 plaque = 1 lot). Pas de contrainte applicative. |
 | Sorties stock | Hors scope v1. |
 | Météo relevés | Structurée : temperature (°C), humidite (%), vent_kmh, ensoleillement (0-3). Prévu capteur Bluetooth. |
+| Mouvements `/stock` | Non bloquants — une erreur `/stock` ne bloque pas la transition du lot. |
+| Unité vers `/stock` | Toujours `kg` — c'est `/stock` qui gère la conversion vers son unité de référence. |
+| Abandon après `en_repos` | Consommations intrants déjà déclarées — pas de contre-passation. Perte déclarable manuellement depuis `/stock/dashboard`. |
+
+---
+
+## Changelog
+
+| Date | Modifications |
+|------|---------------|
+| 7 avril 2026 | Bloc 4 Krencker verrouillé en `en_repos` (recette terminée, sucres déjà pesés). Ajout section mouvements `/stock` (consommations intrants à `en_repos`, entrée produit fini à `stock`, liaisons saveur/ingrédients, jarres hors scope v1). Règles métier mises à jour. |
+| 5 avril 2026 | v3 — PWA mobile, météo structurée, datetime_debut |

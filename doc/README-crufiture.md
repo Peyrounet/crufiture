@@ -104,7 +104,7 @@ preparation → en_repos → production → stock
 ```
 
 - `preparation` : fiche entièrement modifiable (4 blocs)
-- `en_repos` : lot en chambre froide — **seuls les paramètres Krencker modifiables** (brix_fruit, brix_cible, pct_fructose, pa_cible, note)
+- `en_repos` : lot en chambre froide — **fiche entièrement verrouillée** (blocs 1/2/3/4). Consommations intrants déclarées vers `/stock` à l'entrée dans ce statut.
 - `production` : pesées en cours — **fiche verrouillée définitivement**
 - `stock` : mis en jarres, contrôle qualité effectué
 - `abandonné` : lot perdu, jamais supprimé
@@ -198,7 +198,7 @@ poids_brut_nécessaire = cible_souhaitée / rendement_pulpe_cruf / rendement_bru
 | `GET /crufiture/api/lots/:id` | Fiche complète (fruits + relevés météo structurée + contrôles + jarres) |
 | `GET /crufiture/api/lots/:id/rendements` | Rendements historiques saveur (calcul à rebours) |
 | `POST /crufiture/api/lots` | Créer lot (bloc 1 — génère numéro, statut `preparation`) |
-| `PUT /crufiture/api/lots/:id` | Sauvegarder fiche (prep : tout ; en_repos : Krencker uniquement) |
+| `PUT /crufiture/api/lots/:id` | Sauvegarder fiche (prep uniquement — fiche verrouillée dès `en_repos`) |
 | `PUT /crufiture/api/lots/:id/mettre-en-repos` | `preparation` → `en_repos` |
 | `PUT /crufiture/api/lots/:id/demarrer` | `en_repos` → `production` — accepte `heure_debut`, `installation`, `tare_kg` — stocke `datetime_debut` |
 | `PUT /crufiture/api/lots/:id/stocker` | `production` → `stock` — jarres avec tare+pleine, poids_reel calculé backend |
@@ -211,7 +211,7 @@ poids_brut_nécessaire = cible_souhaitée / rendement_pulpe_cruf / rendement_bru
 - `PUT /lots/:id/demarrer` : accepte `heure_debut`, `installation`, `tare_kg` depuis la PWA. Met à jour uniquement les champs fournis.
 - `PUT /lots/:id/stocker` : `poids_reel_kg` calculé backend = somme des contenus jarres (`poids_pleine_kg - tare_kg`). Sans limite de jarres.
 - `POST /lots/:id/releves` : `poids_brut_kg` reçu = poids **net** (tare déduite côté frontend). Météo : `temperature`, `humidite`, `vent_kmh`, `ensoleillement`.
-- `PUT /lots/:id` en `en_repos` : seuls brix_fruit, brix_cible, pct_fructose, pa_cible, note_production acceptés.
+- `PUT /lots/:id` en `en_repos` : fiche entièrement verrouillée — aucun champ accepté.
 
 ---
 
@@ -361,7 +361,7 @@ Page unique adaptée au statut.
 | 1 — Identité | éditable | verrouillé | — |
 | 2 — Pivot | éditable | verrouillé | — |
 | 3 — Autres ingrédients | éditable (grisage progressif) | verrouillé | — |
-| 4 — Krencker | éditable | **éditable** | — |
+| 4 — Krencker | éditable | **verrouillé** | — |
 
 **Grisage progressif (bloc 3) :**
 - Fruits non-pivot : grisés tant que `pivot.poids_base_kg` non renseigné
@@ -506,6 +506,12 @@ Si l'utilisateur revient en arrière sans valider → lot reste `en_repos`, aucu
 | PWA inputs mobile | Utiliser `type="number"` natif avec `inputmode="decimal"` et `font-size: 16px` minimum (évite le zoom iOS). |
 | PWA — abandon 4 étapes | Menu caché → avertissement → note obligatoire → saisie numéro lot pour débloquer. |
 | PWA — météo | Champs structurés (pas texte libre) : temperature, humidite, vent_kmh, ensoleillement (boutons). |
+| Bloc 4 verrouillé en `en_repos` | Tous les blocs sont verrouillés dès `en_repos` — plus seulement 1/2/3. Les sucres sont pesés, la recette est faite. |
+| Mouvements `/stock` non bloquants | Une erreur retournée par `/stock` ne doit jamais bloquer la transition du lot. Logger l'erreur, continuer. |
+| Unité vers `/stock` | Toujours transmettre en `kg`. C'est `/stock` qui gère la conversion vers son `unite_reference`. |
+| `cruf_stock_memoire_ingredient` | Clé = `produit_id`. Liaison optionnelle — ingrédients sans lien ignorés silencieusement. |
+| `cruf_saveur.stock_article_id` | FK optionnelle vers `stock_article`. Si NULL au moment du `stocker`, entrée produit fini ignorée (log). |
+| Abandon après `en_repos` | Consommations intrants déjà déclarées à `/stock` — pas de contre-passation. Perte déclarable manuellement depuis `/stock/dashboard`. |
 
 ---
 
@@ -522,7 +528,7 @@ Si l'utilisateur revient en arrière sans valider → lot reste `en_repos`, aucu
 - ✅ Liste lots, filtres, tri par statut
 - ✅ Création lot → redirect fiche
 - ✅ Fiche preparation — 4 blocs, calculs temps réel, alertes, grisage
-- ✅ Fiche en_repos — blocs 1/2/3 verrouillés, bloc 4 Krencker éditable
+- ✅ Fiche en_repos — fiche entièrement verrouillée (blocs 1/2/3/4)
 - ✅ Transitions mettre-en-repos et demarrer opérationnelles
 - ✅ LotController.php v4 déployé
 - ✅ PWA routes déployées (`/production/*`)
@@ -562,4 +568,13 @@ RewriteRule ^crufiture/ /crufiture/index.html [L]
 
 ---
 
-*Ferme du Peyrounet — Module /crufiture v8 — 5 avril 2026*
+## Changelog
+
+| Date | Modifications |
+|------|---------------|
+| 7 avril 2026 | Bloc 4 Krencker verrouillé en `en_repos` (tous les blocs verrouillés dès `en_repos`). Mise à jour tableau verrouillage FicheLot, règles métier, route `PUT /lots/:id`, checklist déploiement. Ajout points d'attention `/stock` (mouvements non bloquants, unités, `cruf_stock_memoire_ingredient`, `cruf_saveur.stock_article_id`, abandon). |
+| 5 avril 2026 | v8 — PWA mobile complète, météo structurée, datetime_debut, schema v5 |
+
+---
+
+*Ferme du Peyrounet — Module /crufiture — 7 avril 2026*
