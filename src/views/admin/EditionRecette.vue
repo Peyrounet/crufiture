@@ -335,7 +335,7 @@ async function sauvegarder() {
         if (isNouvelle.value) {
             const res = await axiosCrufiture.post('/recettes', payload);
             toast.add({ severity: 'success', summary: 'Créée', detail: 'Recette créée avec succès.', life: 3000 });
-            router.push('/dashboard/recettes');
+            router.push('/dashboard/crufiture/recettes');
         } else {
             await axiosCrufiture.put('/recettes/' + recetteId.value + '/complet', payload);
             toast.add({ severity: 'success', summary: 'Enregistré', detail: 'Recette mise à jour.', life: 3000 });
@@ -349,7 +349,7 @@ async function sauvegarder() {
 }
 
 function retourListe() {
-    router.push('/dashboard/recettes');
+    router.push('/dashboard/crufiture/recettes');
 }
 </script>
 

@@ -490,7 +490,7 @@ const formatPoidsG = (val) => {
     return Math.round(val * 1000) + ' g';
 };
 
-const naviguerVersLots = () => router.push('/dashboard/lots');
+const naviguerVersLots = () => router.push('/dashboard/crufiture/lots');
 </script>
 
 <template>

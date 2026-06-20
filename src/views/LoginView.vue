@@ -26,7 +26,7 @@ const handleLogin = async () => {
     <div class="cruf-login-card">
         <div class="cruf-login-header">
             <div class="cruf-login-icon">🫙</div>
-            <h1>Crufiture</h1>
+            <h1>Transformations</h1>
             <p>Trésors du Peyrounet — Production</p>
         </div>
         <div class="cruf-login-body">

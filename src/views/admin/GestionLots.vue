@@ -81,8 +81,8 @@ const poidsPrincipal = (lot) => {
 };
 
 // ── Navigation ────────────────────────────────────────────────
-const ouvrirLot  = (lot) => router.push('/dashboard/lots/' + lot.id);
-const nouveauLot = ()    => router.push('/dashboard/lots/nouveau');
+const ouvrirLot  = (lot) => router.push('/dashboard/crufiture/lots/' + lot.id);
+const nouveauLot = ()    => router.push('/dashboard/crufiture/lots/nouveau');
 
 // ── Recherche avec debounce ───────────────────────────────────
 let debounceTimer = null;

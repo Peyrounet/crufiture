@@ -7,6 +7,9 @@
 require_once './controllers/PingController.php';
 require_once './controllers/FermeWidgetController.php';
 require_once './controllers/DashboardController.php';
+require_once './controllers/DashboardTransfoController.php';
+require_once './controllers/GammeController.php';
+require_once './controllers/ProduitTransfoController.php';
 require_once './controllers/SaveurController.php';
 require_once './controllers/RecetteController.php';
 require_once './controllers/LotController.php';
@@ -15,12 +18,15 @@ use helpers\ResponseHelper;
 
 $mysqli = (new Database())->getConnection();
 
-$pingCtrl      = new PingController();
-$widgetCtrl    = new FermeWidgetController($mysqli);
-$dashboardCtrl = new DashboardController($mysqli);
-$saveurCtrl    = new SaveurController($mysqli);
-$recetteCtrl   = new RecetteController($mysqli);
-$lotCtrl       = new LotController($mysqli);
+$pingCtrl         = new PingController();
+$widgetCtrl       = new FermeWidgetController($mysqli);
+$dashboardCtrl        = new DashboardController($mysqli);
+$dashboardTransfoCtrl = new DashboardTransfoController($mysqli);
+$gammeCtrl            = new GammeController($mysqli);
+$produitTransfoCtrl = new ProduitTransfoController($mysqli);
+$saveurCtrl       = new SaveurController($mysqli);
+$recetteCtrl      = new RecetteController($mysqli);
+$lotCtrl          = new LotController($mysqli);
 
 $prefix = $_ENV['CRUFITURE_FOLDER'] ?? '/crufiture';
 $api    = $prefix . '/api';
@@ -39,6 +45,15 @@ switch ($method) {
 
         } elseif ($uri === $api . '/dashboard') {
             $dashboardCtrl->getDashboard();
+
+        } elseif ($uri === $api . '/dashboard-transfo') {
+            $dashboardTransfoCtrl->getDashboard();
+
+        } elseif ($uri === $api . '/gammes') {
+            $gammeCtrl->getAll();
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/gammes/(\d+)/produits$#', $uri, $m)) {
+            $produitTransfoCtrl->getAllByGamme($m[1]);
 
         } elseif ($uri === $api . '/saveurs') {
             $saveurCtrl->getAll();
@@ -70,7 +85,13 @@ switch ($method) {
     case 'POST':
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
 
-        if ($uri === $api . '/saveurs') {
+        if ($uri === $api . '/gammes') {
+            $gammeCtrl->create($data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/gammes/(\d+)/produits$#', $uri, $m)) {
+            $produitTransfoCtrl->create($m[1], $data);
+
+        } elseif ($uri === $api . '/saveurs') {
             $saveurCtrl->create($data);
 
         } elseif ($uri === $api . '/recettes') {
@@ -96,7 +117,13 @@ switch ($method) {
     case 'PUT':
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
 
-        if (preg_match('#^' . preg_quote($api, '#') . '/saveurs/(\d+)$#', $uri, $m)) {
+        if (preg_match('#^' . preg_quote($api, '#') . '/gammes/(\d+)$#', $uri, $m)) {
+            $gammeCtrl->update($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/gammes/(\d+)/produits/(\d+)$#', $uri, $m)) {
+            $produitTransfoCtrl->update($m[1], $m[2], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/saveurs/(\d+)$#', $uri, $m)) {
             $saveurCtrl->update($m[1], $data);
 
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)/complet$#', $uri, $m)) {
@@ -126,7 +153,13 @@ switch ($method) {
         break;
 
     case 'DELETE':
-        if (preg_match('#^' . preg_quote($api, '#') . '/saveurs/(\d+)$#', $uri, $m)) {
+        if (preg_match('#^' . preg_quote($api, '#') . '/gammes/(\d+)/produits/(\d+)$#', $uri, $m)) {
+            $produitTransfoCtrl->delete($m[1], $m[2]);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/gammes/(\d+)$#', $uri, $m)) {
+            $gammeCtrl->delete($m[1]);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/saveurs/(\d+)$#', $uri, $m)) {
             $saveurCtrl->delete($m[1]);
 
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)$#', $uri, $m)) {

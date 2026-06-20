@@ -118,7 +118,7 @@ const creer = async () => {
                 detail:   'Complétez maintenant la fiche.',
                 life:     3000,
             });
-            router.push('/dashboard/lots/' + id);
+            router.push('/dashboard/crufiture/lots/' + id);
         } else {
             toast.add({ severity: 'error', summary: 'Erreur', detail: res.data.message, life: 4000 });
         }
@@ -140,7 +140,7 @@ const creer = async () => {
             icon="pi pi-arrow-left"
             text
             size="small"
-            @click="router.push('/dashboard/lots')"
+            @click="router.push('/dashboard/crufiture/lots')"
         />
     </template>
 

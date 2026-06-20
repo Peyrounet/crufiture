@@ -72,9 +72,10 @@ const isOutsideClicked = (event) => {
             <i class="pi pi-bars"></i>
         </button>
 
-        <a href="/crufiture/dashboard" class="layout-topbar-logo">
+        <a href="/transformation/dashboard" class="layout-topbar-logo">
+            <img v-if="panier?.logo" :src="panier.logo" alt="Logo" />
             <span v-if="panier?.name">{{ panier.name }}</span>
-            <span v-else>🫙 Crufiture</span>
+            <span v-else>Transformations</span>
         </a>
 
         <button class="p-link layout-topbar-menu-button layout-topbar-button" @click="onTopBarMenuButton()">

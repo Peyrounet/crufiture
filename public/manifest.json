@@ -1,9 +1,9 @@
 {
-  "name": "Crufiture — Peyrounet",
-  "short_name": "Crufiture",
-  "description": "Suivi de production crufiture — pesées, relevés, mise en stock",
-  "start_url": "/crufiture/production",
-  "scope": "/crufiture/",
+  "name": "Transformations — Peyrounet",
+  "short_name": "Transformations",
+  "description": "Suivi de production — Ferme du Peyrounet",
+  "start_url": "/transformation/production",
+  "scope": "/transformation/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f1b0f",
@@ -12,25 +12,25 @@
   "categories": ["business", "productivity"],
   "icons": [
     {
-      "src": "/crufiture/icons/icon-192.png",
+      "src": "/transformation/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/crufiture/icons/icon-192.png",
+      "src": "/transformation/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/crufiture/icons/icon-512.png",
+      "src": "/transformation/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/crufiture/icons/icon-512.png",
+      "src": "/transformation/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -40,16 +40,16 @@
     {
       "name": "Suivi de production",
       "short_name": "Production",
-      "description": "Saisir un relevé de pesée",
-      "url": "/crufiture/production",
-      "icons": [{ "src": "/crufiture/icons/icon-192.png", "sizes": "192x192" }]
+      "description": "Saisir un relevé de production",
+      "url": "/transformation/production",
+      "icons": [{ "src": "/transformation/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Dashboard",
       "short_name": "Dashboard",
-      "description": "Tableau de bord crufiture",
-      "url": "/crufiture/dashboard",
-      "icons": [{ "src": "/crufiture/icons/icon-192.png", "sizes": "192x192" }]
+      "description": "Tableau de bord transformations",
+      "url": "/transformation/dashboard",
+      "icons": [{ "src": "/transformation/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

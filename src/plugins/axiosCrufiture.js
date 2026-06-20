@@ -5,7 +5,7 @@
 import axios from 'axios';
 
 const axiosCrufiture = axios.create({
-    baseURL: import.meta.env.VITE_CRUFITURE_API_URL ?? '/crufiture/api',
+    baseURL: import.meta.env.VITE_CRUFITURE_API_URL ?? '/transformation/api',
     withCredentials: true,
 });
 

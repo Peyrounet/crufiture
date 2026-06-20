@@ -23,50 +23,72 @@ const routes = [
         component: () => import('@/layout/AppLayout.vue'),
         meta: { requiresAuth: true },
         children: [
+
+            // ── Niveau module /transformation ─────────────────────
             {
                 path: '',
                 name: 'Dashboard',
-                component: () => import('@/views/admin/DashboardCrufiture.vue'),
+                component: () => import('@/views/admin/DashboardTransfo.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Tableau de bord' },
             },
             {
-                path: 'simulateur',
-                name: 'Simulateur',
-                component: () => import('@/views/admin/SimulateurFormulation.vue'),
-                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Simulateur de formulation' },
+                path: 'gammes',
+                name: 'CatalogueGammes',
+                component: () => import('@/views/admin/CatalogueGammes.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Gammes & Produits' },
             },
             {
-                path: 'saveurs',
+                path: 'gammes/:id',
+                name: 'FicheGamme',
+                component: () => import('@/views/admin/FicheGamme.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Fiche gamme' },
+            },
+
+            // ── Gamme crufiture — /dashboard/crufiture/* ─────────
+            {
+                path: 'crufiture',
+                name: 'DashboardCrufiture',
+                component: () => import('@/views/admin/DashboardCrufiture.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Dashboard crufiture' },
+            },
+            {
+                path: 'crufiture/saveurs',
                 name: 'Saveurs',
                 component: () => import('@/views/admin/GestionSaveurs.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Saveurs' },
             },
             {
-                path: 'recettes',
+                path: 'crufiture/recettes',
                 name: 'Recettes',
                 component: () => import('@/views/admin/GestionRecettes.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Recettes' },
             },
             {
-                path: 'recettes/:id',
+                path: 'crufiture/recettes/:id',
                 name: 'EditionRecette',
                 component: () => import('@/views/admin/EditionRecette.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Édition recette' },
             },
             {
-                path: 'lots',
+                path: 'crufiture/simulateur',
+                name: 'Simulateur',
+                component: () => import('@/views/admin/SimulateurFormulation.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Simulateur de formulation' },
+            },
+            {
+                path: 'crufiture/lots',
                 name: 'Lots',
                 component: () => import('@/views/admin/GestionLots.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Lots de production' },
             },
             {
-                path: 'lots/nouveau',
+                path: 'crufiture/lots/nouveau',
                 name: 'CreationLot',
                 component: () => import('@/views/admin/CreationLot.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Nouveau lot' },
             },
             {
-                path: 'lots/:id',
+                path: 'crufiture/lots/:id',
                 name: 'FicheLot',
                 component: () => import('@/views/admin/FicheLot.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Fiche lot' },
@@ -119,7 +141,7 @@ const routes = [
 ];
 
 const router = createRouter({
-    history: createWebHistory('/crufiture/'),
+    history: createWebHistory('/transformation/'),
     routes,
 });
 
@@ -145,7 +167,7 @@ router.beforeEach(async (to, from, next) => {
         return next({ name: 'Dashboard' });
     }
 
-    if (to.meta.title) document.title = to.meta.title + ' — Crufiture';
+    if (to.meta.title) document.title = to.meta.title + ' — Transformations';
 
     if (authStore.token && to.path === '/login') {
         return next('/dashboard');

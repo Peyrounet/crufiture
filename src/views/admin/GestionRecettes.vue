@@ -86,11 +86,11 @@ function initiales(nom) {
 
 // ── Navigation ────────────────────────────────────────────────────
 function ouvrirRecette(id) {
-    router.push('/dashboard/recettes/' + id);
+    router.push('/dashboard/crufiture/recettes/' + id);
 }
 
 function nouvelleRecette() {
-    router.push('/dashboard/recettes/nouvelle');
+    router.push('/dashboard/crufiture/recettes/nouvelle');
 }
 
 // ── Duplication (nouvelle version) ───────────────────────────────
@@ -108,7 +108,7 @@ async function dupliquer(recette) {
                 life: 3000,
             });
             await charger();
-            router.push('/dashboard/recettes/' + res.data.details.id);
+            router.push('/dashboard/crufiture/recettes/' + res.data.details.id);
         }
     } catch {
         toast.add({ severity: 'error', summary: 'Erreur', detail: 'Impossible de dupliquer.', life: 4000 });
