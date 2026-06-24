@@ -17,6 +17,11 @@ const ITEMS_SPECIFIQUES = {
         { label: 'Lots',        icon: 'pi pi-fw pi-list',       to: '/dashboard/crufiture/lots' },
         { label: 'Simulateur',  icon: 'pi pi-fw pi-calculator', to: '/dashboard/crufiture/simulateur' },
     ],
+    maceration_alcool: [
+        { label: 'Dashboard',  icon: 'pi pi-fw pi-chart-pie', to: '/dashboard/maceration_alcool' },
+        { label: 'Recettes',   icon: 'pi pi-fw pi-book',      to: '/dashboard/maceration_alcool/recettes' },
+        { label: 'Lots',       icon: 'pi pi-fw pi-list',      to: '/dashboard/maceration_alcool/lots' },
+    ],
 };
 
 function itemsGeneriques(slug) {

@@ -76,14 +76,14 @@ class RecetteController
         $recette['version']   = (int) $recette['version'];
         $recette['actif']     = (int) $recette['actif'];
 
-        // Ingrédients (ordonnés) — libellé depuis rp_produit + lien stock mémorisé
+        // Ingrédients (ordonnés) — libellé depuis stock_article (via bridge cruf_stock_memoire_ingredient)
         $stmt2 = $this->mysqli->prepare(
-            "SELECT i.id, i.produit_id, p.libelle_canonique, p.categorie,
+            "SELECT i.id, i.produit_id, sa.libelle AS libelle_canonique,
                     i.type, i.pct_base, i.note, i.ordre,
                     sm.stock_article_id
              FROM cruf_recette_ingredient i
-             JOIN rp_produit p ON p.id = i.produit_id
              LEFT JOIN cruf_stock_memoire_ingredient sm ON sm.produit_id = i.produit_id
+             LEFT JOIN stock_article sa ON sa.id = sm.stock_article_id
              WHERE i.recette_id = ?
              ORDER BY i.ordre ASC, i.id ASC"
         );

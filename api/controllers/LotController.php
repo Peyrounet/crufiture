@@ -215,14 +215,15 @@ class LotController
 
         $lot = $this->castLotRowFull($lot);
 
-        // Ingrédients du lot avec libellé depuis rp_produit
+        // Ingrédients du lot avec libellé depuis stock_article (via bridge cruf_stock_memoire_ingredient)
         $stmt2 = $this->mysqli->prepare(
             "SELECT lf.id, lf.produit_id, lf.type, lf.pct_base,
                     lf.poids_brut_kg, lf.poids_pulpe_kg, lf.poids_base_kg,
                     lf.fournisseur, lf.origine, lf.note, lf.ordre,
-                    p.libelle_canonique, p.categorie
+                    sa.libelle AS libelle_canonique
              FROM cruf_lot_fruit lf
-             JOIN rp_produit p ON p.id = lf.produit_id
+             LEFT JOIN cruf_stock_memoire_ingredient sm ON sm.produit_id = lf.produit_id
+             LEFT JOIN stock_article sa ON sa.id = sm.stock_article_id
              WHERE lf.lot_id = ? ORDER BY lf.ordre ASC, lf.id ASC"
         );
         $stmt2->bind_param('i', $id);

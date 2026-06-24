@@ -575,6 +575,7 @@ function retourListe() {
                         class="ed-additifs-list"
                     >
                         <template #item="{ element: additif, index: idx }">
+                        <div>
                         <div class="ed-additif-row">
                             <!-- Poignée drag -->
                             <div class="ed-drag-handle" title="Réordonner">
@@ -654,6 +655,7 @@ function retourListe() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
                         </div>
                         </template>
                     </draggable>

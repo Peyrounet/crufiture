@@ -93,6 +93,44 @@ const routes = [
                 component: () => import('@/views/admin/FicheLot.vue'),
                 meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Fiche lot' },
             },
+
+            // ── Gamme macération alcoolique — /dashboard/maceration_alcool/* ─
+            {
+                path: 'maceration_alcool',
+                name: 'DashboardMacerationAlcool',
+                component: () => import('@/views/admin/DashboardMacerationAlcool.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Dashboard macération alcoolique' },
+            },
+            {
+                path: 'maceration_alcool/recettes',
+                name: 'GestionRecettesMace',
+                component: () => import('@/views/admin/GestionRecettesMace.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Recettes macération' },
+            },
+            {
+                path: 'maceration_alcool/recettes/:id',
+                name: 'EditionRecetteMace',
+                component: () => import('@/views/admin/EditionRecetteMace.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Édition recette macération' },
+            },
+            {
+                path: 'maceration_alcool/lots',
+                name: 'GestionLotsMace',
+                component: () => import('@/views/admin/GestionLotsMace.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Lots macération' },
+            },
+            {
+                path: 'maceration_alcool/lots/nouveau',
+                name: 'CreationLotMace',
+                component: () => import('@/views/admin/CreationLotMace.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Nouveau lot macération' },
+            },
+            {
+                path: 'maceration_alcool/lots/:id',
+                name: 'FicheLotMace',
+                component: () => import('@/views/admin/FicheLotMace.vue'),
+                meta: { requiresAuth: true, roles: ['admin', 'organizer'], title: 'Fiche lot macération' },
+            },
         ],
     },
 
