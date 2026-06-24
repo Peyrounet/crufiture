@@ -13,20 +13,24 @@ require_once './controllers/ProduitTransfoController.php';
 require_once './controllers/SaveurController.php';
 require_once './controllers/RecetteController.php';
 require_once './controllers/LotController.php';
+require_once './controllers/RecetteTransfoController.php';
+require_once './controllers/LotMaceAlcoolController.php';
 
 use helpers\ResponseHelper;
 
 $mysqli = (new Database())->getConnection();
 
-$pingCtrl         = new PingController();
-$widgetCtrl       = new FermeWidgetController($mysqli);
+$pingCtrl             = new PingController();
+$widgetCtrl           = new FermeWidgetController($mysqli);
 $dashboardCtrl        = new DashboardController($mysqli);
 $dashboardTransfoCtrl = new DashboardTransfoController($mysqli);
 $gammeCtrl            = new GammeController($mysqli);
-$produitTransfoCtrl = new ProduitTransfoController($mysqli);
-$saveurCtrl       = new SaveurController($mysqli);
-$recetteCtrl      = new RecetteController($mysqli);
-$lotCtrl          = new LotController($mysqli);
+$produitTransfoCtrl   = new ProduitTransfoController($mysqli);
+$saveurCtrl           = new SaveurController($mysqli);
+$recetteCtrl          = new RecetteController($mysqli);
+$lotCtrl              = new LotController($mysqli);
+$recetteTransfoCtrl   = new RecetteTransfoController($mysqli);
+$lotMaceAlcoolCtrl    = new LotMaceAlcoolController($mysqli);
 
 $prefix = $_ENV['CRUFITURE_FOLDER'] ?? '/crufiture';
 $api    = $prefix . '/api';
@@ -77,6 +81,23 @@ switch ($method) {
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)$#', $uri, $m)) {
             $lotCtrl->getOne($m[1]);
 
+        // ── Recettes tronc commun ─────────────────────────────────
+        } elseif ($uri === $api . '/recettes-transfo/version') {
+            $recetteTransfoCtrl->getVersion();
+
+        } elseif ($uri === $api . '/recettes-transfo/export-pdf') {
+            $recetteTransfoCtrl->exportPdf();
+
+        } elseif ($uri === $api . '/recettes-transfo') {
+            $recetteTransfoCtrl->getRecettes();
+
+        // ── Lots macération alcoolique ────────────────────────────
+        } elseif ($uri === $api . '/mace-alcool/lots') {
+            $lotMaceAlcoolCtrl->getAll();
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->getOne($m[1]);
+
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
         }
@@ -108,6 +129,20 @@ switch ($method) {
 
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)/controles$#', $uri, $m)) {
             $lotCtrl->addControle($m[1], $data);
+
+        // ── Recettes tronc commun ─────────────────────────────────
+        } elseif ($uri === $api . '/recettes-transfo') {
+            $recetteTransfoCtrl->creerRecette();
+
+        } elseif ($uri === $api . '/recettes-transfo/dupliquer') {
+            $recetteTransfoCtrl->dupliquerVersion();
+
+        // ── Lots macération alcoolique ────────────────────────────
+        } elseif ($uri === $api . '/mace-alcool/lots') {
+            $lotMaceAlcoolCtrl->create($data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)/controles$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->addControle($m[1], $data);
 
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
@@ -147,6 +182,35 @@ switch ($method) {
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/lots/(\d+)$#', $uri, $m)) {
             $lotCtrl->update($m[1], $data);
 
+        // ── Recettes tronc commun ─────────────────────────────────
+        } elseif ($uri === $api . '/recettes-transfo') {
+            $recetteTransfoCtrl->modifierVersion();
+
+        } elseif ($uri === $api . '/recettes-transfo/statut') {
+            $recetteTransfoCtrl->changerStatut();
+
+        // ── Lots macération alcoolique ────────────────────────────
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)/demarrer-maceration$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->demarrerMaceration($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)/filtrer$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->filtrer($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)/assembler$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->assembler($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)/demarrer-maturation$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->demarrerMaturation($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)/stocker$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->stocker($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)/ingredients$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->updateIngredients($m[1], $data);
+
+        } elseif (preg_match('#^' . preg_quote($api, '#') . '/mace-alcool/lots/(\d+)/abandonner$#', $uri, $m)) {
+            $lotMaceAlcoolCtrl->abandonner($m[1], $data);
+
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
         }
@@ -164,6 +228,10 @@ switch ($method) {
 
         } elseif (preg_match('#^' . preg_quote($api, '#') . '/recettes/(\d+)$#', $uri, $m)) {
             $recetteCtrl->delete($m[1]);
+
+        // ── Recettes tronc commun ─────────────────────────────────
+        } elseif ($uri === $api . '/recettes-transfo') {
+            $recetteTransfoCtrl->supprimerVersion();
 
         } else {
             echo ResponseHelper::jsonResponse('Route introuvable.', 'error', null, 404);
